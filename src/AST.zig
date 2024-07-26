@@ -13,13 +13,21 @@ const Kind = union(enum) {
     variable: Variable,
 
     pub fn toStr(self: Self) []const u8 {
-        switch (self) {
-            self.value => return switch (self.value) {
+        return switch (self) {
+            .value => return switch (self.value) {
                 Value.@"0" => "F",
                 Value.@"1" => "T",
-                else => "PD",
             },
-        }
+            .operator => return switch (self.operator) {
+                Operator.@"!" => "NOT",
+                Operator.@"&" => "AND",
+                Operator.@"^" => "XOR",
+                Operator.@"|" => "OR",
+                Operator.@">" => "IMP",
+                Operator.@"=" => "EQL",
+            },
+            else => "",
+        };
     }
 };
 
@@ -68,7 +76,7 @@ test "generate ast from string" {
 test "by hand ast" {
     var n1 = Node{
         .kind = Kind{
-            .operator = Operator.@"|",
+            .operator = Operator.@"!",
         },
     };
 
