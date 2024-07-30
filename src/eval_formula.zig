@@ -155,7 +155,7 @@ test "expr11" {
 }
 
 test "expr12" {
-    const str = "01&11!0|=|";
+    const str = "01&11!0|=|"; //(0 & 1) | (1 = (!1 | 0))
     try computeFormula(str);
 }
 

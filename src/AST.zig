@@ -2,6 +2,7 @@ const std = @import("std");
 const formula = @import("eval_formula.zig");
 const Operator = formula.Operator;
 const Value = formula.Value;
+const Stack = @import("Stack.zig").Stack;
 
 const Variable = struct {};
 
@@ -26,7 +27,7 @@ const Kind = union(enum) {
                 Operator.@">" => "IMP",
                 Operator.@"=" => "EQL",
             },
-            else => "",
+            else => return "",
         };
     }
 };
@@ -35,6 +36,18 @@ const Node = struct {
     kind: Kind,
     left: ?*Node = null,
     right: ?*Node = null,
+
+    pub fn init(kind: Kind, left: ?*Node, right: ?*Node) !*Node {
+        const maybe_node = std.testing.allocator.create(Node);
+        if (maybe_node) |node| {
+            node.kind = kind;
+            node.left = left;
+            node.right = right;
+            return node;
+        } else |e| {
+            return e;
+        }
+    }
 };
 
 const BoolAST = struct {
@@ -53,6 +66,7 @@ const BoolAST = struct {
 
     fn printAST(maybe_node: ?*Node, indent: usize) void {
         if (maybe_node) |node| {
+            defer std.testing.allocator.destroy(node);
             if (indent != 0) {
                 padd(indent - 4);
                 std.debug.print("└──", .{});
@@ -66,45 +80,83 @@ const BoolAST = struct {
             }
         } else return;
     }
+
+    pub fn generateAST(str: []const u8) !BoolAST {
+        const rootNode = try genAST(str);
+        return BoolAST{
+            .root = rootNode,
+        };
+    }
+
+    fn genAST(rpn: []const u8) !*Node {
+        var stack = try Stack(*Node).init(std.testing.allocator);
+        defer stack.deinit();
+
+        for (rpn) |token| {
+            if (Value.getValue(token)) |value| {
+                const node = try Node.init(Kind{ .value = value }, null, null);
+                try stack.push(node);
+            } else if (Operator.getOp(token)) |operator| {
+                if (operator == Operator.@"!") {
+                    const left = stack.pop();
+                    const node = try Node.init(Kind{ .operator = operator }, left, null);
+                    try stack.push(node);
+                } else {
+                    const left = stack.pop();
+                    const right = stack.pop();
+                    const node = try Node.init(Kind{ .operator = operator }, left, right);
+                    try stack.push(node);
+                }
+            }
+        }
+        return stack.pop();
+    }
 };
 
 test "generate ast from string" {
-    const str = "10";
-    _ = str; // autofix
+    const str = "01&1!0||";
+    const AST = try BoolAST.generateAST(str);
+    AST.print();
 }
 
-test "by hand ast" {
-    var n1 = Node{
-        .kind = Kind{
-            .operator = Operator.@"!",
-        },
-    };
+// test "generate ast from string 2" {
+//     const str = "01|1!10!&|&01&11!0|=|>";
+//     const AST = try BoolAST.generateAST(str);
+//     AST.print();
+// }
 
-    var n2 = Node{
-        .kind = Kind{
-            .value = Value.@"0",
-        },
-    };
-
-    var n3 = Node{
-        .kind = Kind{
-            .value = Value.@"1",
-        },
-    };
-
-    var n4 = Node{
-        .kind = Kind{
-            .operator = Operator.@"|",
-        },
-    };
-
-    const ast = BoolAST{
-        .root = &n1,
-    };
-
-    n4.left = &n2;
-    n4.right = &n3;
-    ast.root.left = &n4;
-
-    ast.print();
-}
+// test "by hand ast" {
+//     var n1 = Node{
+//         .kind = Kind{
+//             .operator = Operator.@"!",
+//         },
+//     };
+//
+//     var n2 = Node{
+//         .kind = Kind{
+//             .value = Value.@"0",
+//         },
+//     };
+//
+//     var n3 = Node{
+//         .kind = Kind{
+//             .value = Value.@"1",
+//         },
+//     };
+//
+//     var n4 = Node{
+//         .kind = Kind{
+//             .operator = Operator.@"|",
+//         },
+//     };
+//
+//     const ast = BoolAST{
+//         .root = &n1,
+//     };
+//
+//     n4.left = &n2;
+//     n4.right = &n3;
+//     ast.root.left = &n4;
+//
+//     ast.print();
+// }
