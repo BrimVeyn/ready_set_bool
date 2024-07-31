@@ -3,6 +3,7 @@ const formula = @import("eval_formula.zig");
 const Operator = formula.Operator;
 const Value = formula.Value;
 const Stack = @import("Stack.zig").Stack;
+const ArrayList = std.ArrayList;
 
 const Variable = struct {};
 
@@ -50,46 +51,91 @@ const Node = struct {
     }
 };
 
-const BoolAST = struct {
+const StringStream = struct {
     const Self = @This();
-    root: *Node,
+    buffer: ArrayList(u8),
+    allocator: *std.mem.Allocator,
 
-    pub fn print(self: Self) void {
-        printAST(self.root, 0);
-    }
-
-    fn padd(indent: usize) void {
-        for (0..indent) |_| {
-            std.debug.print(" ", .{});
-        }
-    }
-
-    fn printAST(maybe_node: ?*Node, indent: usize) void {
-        if (maybe_node) |node| {
-            defer std.testing.allocator.destroy(node);
-            if (indent != 0) {
-                padd(indent - 4);
-                std.debug.print("└──", .{});
-            }
-            std.debug.print("{s}\n", .{node.kind.toStr()});
-            if (node.left) |lhs| {
-                printAST(lhs, indent + 4);
-            }
-            if (node.right) |rhs| {
-                printAST(rhs, indent + 4);
-            }
-        } else return;
-    }
-
-    pub fn generateAST(str: []const u8) !BoolAST {
-        const rootNode = try genAST(str);
-        return BoolAST{
-            .root = rootNode,
+    pub fn init(allocator: *std.mem.Allocator) StringStream {
+        return StringStream{
+            .buffer = std.ArrayList(u8).init(allocator.*),
+            .allocator = allocator,
         };
     }
 
-    fn genAST(rpn: []const u8) !*Node {
-        var stack = try Stack(*Node).init(std.testing.allocator);
+    pub fn toStr(self: *Self) ![]const u8 {
+        const tmp = try self.buffer.clone();
+        const str = self.buffer.toOwnedSlice();
+        self.buffer = tmp;
+        return str;
+    }
+
+    pub fn append(self: *Self, str: []const u8) !void {
+        try self.buffer.appendSlice(str);
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.buffer.deinit();
+    }
+};
+
+const BoolAST = struct {
+    const Self = @This();
+    root: *Node,
+    allocator: *std.mem.Allocator,
+
+    pub fn print(self: *Self, allocator: *std.mem.Allocator) !void {
+        defer std.testing.allocator.destroy(self.root);
+        std.debug.print("{s}", .{self.root.kind.toStr()});
+
+        const pointerRight = "└──";
+        const pointerLeft = if (self.root.right != null) "├──" else "└──";
+        var ss = StringStream.init(allocator);
+        try printAST(self.root.left, &ss, pointerLeft, self.root.right != null);
+        try printAST(self.root.right, &ss, pointerRight, false);
+        std.debug.print("\n", .{});
+        // defer ss.deinit();
+    }
+
+    fn printAST(maybe_node: ?*Node, ss: *StringStream, pointer: []const u8, has_rhs: bool) !void {
+        if (maybe_node) |node| {
+            defer std.testing.allocator.destroy(node);
+            const padding = try ss.*.toStr();
+            defer std.testing.allocator.free(padding);
+
+            std.debug.print("\n", .{});
+            std.debug.print("{s}", .{padding});
+            std.debug.print("{s}", .{pointer});
+            std.debug.print("{s}", .{node.kind.toStr()});
+
+            var paddingStream = StringStream.init(ss.allocator);
+            defer paddingStream.deinit();
+            try paddingStream.append(padding);
+
+            if (has_rhs) {
+                try paddingStream.append("│  ");
+            } else {
+                try paddingStream.append("   ");
+            }
+
+            const ptr_left = if (node.right != null) "├──" else "└──";
+            const ptr_right = "└──";
+
+            try printAST(node.left, &paddingStream, ptr_left, node.right != null);
+            try printAST(node.right, &paddingStream, ptr_right, false);
+        } else return;
+    }
+
+    pub fn generateAST(allocator: *std.mem.Allocator, str: []const u8) !BoolAST {
+        const rootNode = try genAST(allocator, str);
+        return BoolAST{
+            .root = rootNode,
+            .allocator = allocator,
+        };
+    }
+
+    fn genAST(allocator: *std.mem.Allocator, rpn: []const u8) !*Node {
+        var stack = try Stack(*Node).init(allocator);
         defer stack.deinit();
 
         for (rpn) |token| {
@@ -114,16 +160,36 @@ const BoolAST = struct {
 };
 
 test "generate ast from string" {
-    const str = "01&1!0||";
-    const AST = try BoolAST.generateAST(str);
-    AST.print();
+    const str = "11|0&";
+    var allocator = std.testing.allocator;
+    var AST = try BoolAST.generateAST(&allocator, str);
+    try AST.print(&allocator);
+    std.debug.print("------------------\n", .{});
 }
 
-// test "generate ast from string 2" {
-//     const str = "01|1!10!&|&01&11!0|=|>";
-//     const AST = try BoolAST.generateAST(str);
-//     AST.print();
-// }
+test "generate ast from string 1" {
+    const str = "01&1!0||";
+    var allocator = std.testing.allocator;
+    var AST = try BoolAST.generateAST(&allocator, str);
+    try AST.print(&allocator);
+    std.debug.print("------------------\n", .{});
+}
+
+test "generate ast from string 2" {
+    const str = "01|1!10!&|&01&11!0|=|>";
+    var allocator = std.testing.allocator;
+    var AST = try BoolAST.generateAST(&allocator, str);
+    try AST.print(&allocator);
+    std.debug.print("------------------\n", .{});
+}
+
+test "generate ast from string 3" {
+    const str = "1!0|1011|1&>&11&!&|";
+    var allocator = std.testing.allocator;
+    var AST = try BoolAST.generateAST(&allocator, str);
+    try AST.print(&allocator);
+    std.debug.print("------------------\n", .{});
+}
 
 // test "by hand ast" {
 //     var n1 = Node{

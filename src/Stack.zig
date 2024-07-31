@@ -9,9 +9,9 @@ pub fn Stack(comptime T: type) type {
         data: ArrayList(T),
         size: usize = 0,
 
-        pub fn init(allocator: std.mem.Allocator) !Self {
+        pub fn init(allocator: *std.mem.Allocator) !Self {
             return Self{
-                .data = ArrayList(T).init(allocator),
+                .data = ArrayList(T).init(allocator.*),
                 .size = 0,
             };
         }

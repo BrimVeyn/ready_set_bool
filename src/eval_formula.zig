@@ -65,7 +65,7 @@ const ParsingError = error{
     invalidCharacter,
 };
 
-fn evalFormula(allocator: std.mem.Allocator, str: []const u8) !bool {
+fn evalFormula(allocator: *std.mem.Allocator, str: []const u8) !bool {
     var stack = try Stack(u1).init(allocator);
     defer stack.deinit();
 
@@ -91,9 +91,9 @@ fn evalFormula(allocator: std.mem.Allocator, str: []const u8) !bool {
 }
 
 pub fn computeFormula(str: []const u8) !void {
-    const allocator = std.testing.allocator;
+    var allocator = std.testing.allocator;
     std.debug.print("{s}Formula = {s}{s}{s}\n", .{ color.green, color.yellow, str, color.reset });
-    const res = try evalFormula(allocator, str);
+    const res = try evalFormula(&allocator, str);
     const res_color = if (res == false) color.red else color.green;
     std.debug.print("Result = {s}{}{s}\n", .{ res_color, res, color.reset });
     std.debug.print("----------------------------\n", .{});
@@ -161,6 +161,11 @@ test "expr12" {
 
 test "expr13" {
     const str = "01|1!10!&|&01&11!0|=|>";
+    try computeFormula(str);
+}
+
+test "expr14" {
+    const str = "1!0|1011|1&>&11&!&|";
     try computeFormula(str);
 }
 
