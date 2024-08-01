@@ -26,7 +26,7 @@ pub const Operator = enum(u8) {
     }
 
     pub fn doOp(self: Self, a: u1, b: u1) u1 {
-        std.debug.print("{d} {c} {d}\n", .{ b, @intFromEnum(self), a });
+        // std.debug.print("{d} {c} {d}\n", .{ b, @intFromEnum(self), a });
         return switch (self) {
             .@"&" => b & a,
             .@"|" => b | a,
@@ -60,12 +60,12 @@ pub const Value = enum(u8) {
     }
 };
 
-const ParsingError = error{
-    notEnoughBool,
+pub const ParsingError = error{
+    wrongFormat,
     invalidCharacter,
 };
 
-fn evalFormula(allocator: *std.mem.Allocator, str: []const u8) !bool {
+pub fn evalFormula(allocator: *std.mem.Allocator, str: []const u8) !bool {
     var stack = try Stack(u1).init(allocator);
     defer stack.deinit();
 
@@ -76,17 +76,20 @@ fn evalFormula(allocator: *std.mem.Allocator, str: []const u8) !bool {
             try stack.push(value.getBool());
         } else if (Operator.getOp(str[i])) |operator| {
             if (operator == Operator.@"!") {
-                std.debug.print("~{d}\n", .{stack.data.items[stack.data.items.len - 1]});
+                // std.debug.print("~{d}\n", .{stack.data.items[stack.data.items.len - 1]});
                 try stack.push(~stack.pop());
                 continue;
             }
-            if (stack.size < 2) return ParsingError.notEnoughBool;
+
+            if (stack.size < 2) return ParsingError.wrongFormat;
+
             const a = stack.pop();
             const b = stack.pop();
+
             try stack.push(operator.doOp(a, b));
         } else return ParsingError.invalidCharacter;
     }
-    stack.print();
+    // stack.print();
     return if (stack.pop() == 0) false else true;
 }
 
@@ -174,10 +177,10 @@ test "more than one item in stack" {
     try computeFormula(str);
 }
 
-test "error notEnoughBool" {
+test "error wrongFormat" {
     const str = "11||";
-    try std.testing.expectError(ParsingError.notEnoughBool, computeFormula(str));
-    std.log.err("{}", .{ParsingError.notEnoughBool});
+    try std.testing.expectError(ParsingError.wrongFormat, computeFormula(str));
+    std.log.err("{}", .{ParsingError.wrongFormat});
 }
 
 test "error invalidCharacter" {

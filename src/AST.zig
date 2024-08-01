@@ -2,10 +2,30 @@ const std = @import("std");
 const formula = @import("eval_formula.zig");
 const Operator = formula.Operator;
 const Value = formula.Value;
-const Stack = @import("Stack.zig").Stack;
 const ArrayList = std.ArrayList;
 
-const Variable = struct {};
+const Stack = @import("Stack.zig").Stack;
+const StringStream = @import("StringStream.zig").StringStream;
+
+pub const Variable = struct {
+    const Self = @This();
+    char: u8,
+
+    pub fn toStr(self: *const Self) []const u8 {
+        var buffer: [1]u8 = [_]u8{self.char};
+        const slice = buffer[0..1];
+        return slice;
+    }
+
+    pub fn getVariable(c: u8) ?Variable {
+        return switch (c) {
+            'A'...'Z' => Variable{
+                .char = c,
+            },
+            else => null,
+        };
+    }
+};
 
 const Kind = union(enum) {
     const Self = @This();
@@ -17,8 +37,8 @@ const Kind = union(enum) {
     pub fn toStr(self: Self) []const u8 {
         return switch (self) {
             .value => return switch (self.value) {
-                Value.@"0" => "F",
-                Value.@"1" => "T",
+                Value.@"0" => "0",
+                Value.@"1" => "1",
             },
             .operator => return switch (self.operator) {
                 Operator.@"!" => "NOT",
@@ -28,7 +48,10 @@ const Kind = union(enum) {
                 Operator.@">" => "IMP",
                 Operator.@"=" => "EQL",
             },
-            else => return "",
+            .variable => {
+                const str = self.variable.toStr();
+                return str;
+            },
         };
     }
 };
@@ -51,41 +74,13 @@ const Node = struct {
     }
 };
 
-const StringStream = struct {
-    const Self = @This();
-    buffer: ArrayList(u8),
-    allocator: *std.mem.Allocator,
-
-    pub fn init(allocator: *std.mem.Allocator) StringStream {
-        return StringStream{
-            .buffer = std.ArrayList(u8).init(allocator.*),
-            .allocator = allocator,
-        };
-    }
-
-    pub fn toStr(self: *Self) ![]const u8 {
-        const tmp = try self.buffer.clone();
-        const str = self.buffer.toOwnedSlice();
-        self.buffer = tmp;
-        return str;
-    }
-
-    pub fn append(self: *Self, str: []const u8) !void {
-        try self.buffer.appendSlice(str);
-    }
-
-    pub fn deinit(self: *Self) void {
-        self.buffer.deinit();
-    }
-};
-
-const BoolAST = struct {
+pub const BoolAST = struct {
     const Self = @This();
     root: *Node,
     allocator: *std.mem.Allocator,
 
     pub fn print(self: *Self, allocator: *std.mem.Allocator) !void {
-        defer std.testing.allocator.destroy(self.root);
+        defer self.allocator.destroy(self.root);
         std.debug.print("{s}", .{self.root.kind.toStr()});
 
         const pointerRight = "└──";
@@ -94,7 +89,6 @@ const BoolAST = struct {
         try printAST(self.root.left, &ss, pointerLeft, self.root.right != null);
         try printAST(self.root.right, &ss, pointerRight, false);
         std.debug.print("\n", .{});
-        // defer ss.deinit();
     }
 
     fn printAST(maybe_node: ?*Node, ss: *StringStream, pointer: []const u8, has_rhs: bool) !void {
@@ -141,6 +135,9 @@ const BoolAST = struct {
         for (rpn) |token| {
             if (Value.getValue(token)) |value| {
                 const node = try Node.init(Kind{ .value = value }, null, null);
+                try stack.push(node);
+            } else if (Variable.getVariable(token)) |variable| {
+                const node = try Node.init(Kind{ .variable = variable }, null, null);
                 try stack.push(node);
             } else if (Operator.getOp(token)) |operator| {
                 if (operator == Operator.@"!") {
@@ -191,38 +188,10 @@ test "generate ast from string 3" {
     std.debug.print("------------------\n", .{});
 }
 
-// test "by hand ast" {
-//     var n1 = Node{
-//         .kind = Kind{
-//             .operator = Operator.@"!",
-//         },
-//     };
-//
-//     var n2 = Node{
-//         .kind = Kind{
-//             .value = Value.@"0",
-//         },
-//     };
-//
-//     var n3 = Node{
-//         .kind = Kind{
-//             .value = Value.@"1",
-//         },
-//     };
-//
-//     var n4 = Node{
-//         .kind = Kind{
-//             .operator = Operator.@"|",
-//         },
-//     };
-//
-//     const ast = BoolAST{
-//         .root = &n1,
-//     };
-//
-//     n4.left = &n2;
-//     n4.right = &n3;
-//     ast.root.left = &n4;
-//
-//     ast.print();
-// }
+test "generate ast from string with variable" {
+    const str = "A!B|CBAA|B&>&AD&!&|";
+    var allocator = std.testing.allocator;
+    var AST = try BoolAST.generateAST(&allocator, str);
+    try AST.print(&allocator);
+    std.debug.print("------------------\n", .{});
+}

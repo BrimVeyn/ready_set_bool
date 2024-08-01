@@ -1,0 +1,93 @@
+1/3 print_truth_table.test.truth_table 1...| A | B | C | = |
+|---|---|---|---|
+| 0 | 0 | 0 | 0 |
+| 0 | 0 | 1 | 1 |
+| 0 | 1 | 0 | 0 |
+| 0 | 1 | 1 | 1 |
+| 1 | 0 | 0 | 0 |
+| 1 | 0 | 1 | 1 |
+| 1 | 1 | 0 | 1 |
+| 1 | 1 | 1 | 1 |
+OK
+2/3 print_truth_table.test.truth_table 2...| A | B | C | D | E | = |
+|---|---|---|---|---|---|
+| 0 | 0 | 0 | 0 | 0 | 0 |
+| 0 | 0 | 0 | 0 | 1 | 1 |
+| 0 | 0 | 0 | 1 | 0 | 0 |
+| 0 | 0 | 0 | 1 | 1 | 1 |
+| 0 | 0 | 1 | 0 | 0 | 0 |
+| 0 | 0 | 1 | 0 | 1 | 1 |
+| 0 | 0 | 1 | 1 | 0 | 0 |
+| 0 | 0 | 1 | 1 | 1 | 1 |
+| 0 | 1 | 0 | 0 | 0 | 0 |
+| 0 | 1 | 0 | 0 | 1 | 1 |
+| 0 | 1 | 0 | 1 | 0 | 0 |
+| 0 | 1 | 0 | 1 | 1 | 1 |
+| 0 | 1 | 1 | 0 | 0 | 0 |
+| 0 | 1 | 1 | 0 | 1 | 1 |
+| 0 | 1 | 1 | 1 | 0 | 0 |
+| 0 | 1 | 1 | 1 | 1 | 1 |
+| 1 | 0 | 0 | 0 | 0 | 0 |
+| 1 | 0 | 0 | 0 | 1 | 1 |
+| 1 | 0 | 0 | 1 | 0 | 0 |
+| 1 | 0 | 0 | 1 | 1 | 1 |
+| 1 | 0 | 1 | 0 | 0 | 0 |
+| 1 | 0 | 1 | 0 | 1 | 1 |
+| 1 | 0 | 1 | 1 | 0 | 0 |
+| 1 | 0 | 1 | 1 | 1 | 1 |
+| 1 | 1 | 0 | 0 | 0 | 1 |
+| 1 | 1 | 0 | 0 | 1 | 1 |
+| 1 | 1 | 0 | 1 | 0 | 1 |
+| 1 | 1 | 0 | 1 | 1 | 1 |
+| 1 | 1 | 1 | 0 | 0 | 1 |
+| 1 | 1 | 1 | 0 | 1 | 1 |
+| 1 | 1 | 1 | 1 | 0 | 1 |
+| 1 | 1 | 1 | 1 | 1 | 1 |
+OK
+3/3 print_truth_table.test.truth_table error...FAIL (wrongFormat)
+/home/bvan-pae/Desktop/perso/zig_projects/ready_set_bool/src/eval_formula.zig:84:33: 0x1041bff in evalFormula (test)
+            if (stack.size < 2) return ParsingError.wrongFormat;
+                                ^
+/home/bvan-pae/Desktop/perso/zig_projects/ready_set_bool/src/print_truth_table.zig:88:32: 0x104291a in print_truth_table (test)
+        const result: u8 = if (try evalFormula(allocator, newFormula) == true) '1' else '0';
+                               ^
+/home/bvan-pae/Desktop/perso/zig_projects/ready_set_bool/src/print_truth_table.zig:112:5: 0x1043176 in test.truth_table error (test)
+    try print_truth_table(&allocator, rpn);
+    ^
+[gpa] (err): memory address 0x7fc6fc8d8000 leaked: 
+/home/bvan-pae/zig/0.14.0-dev.225+45be80364/files/lib/std/array_list.zig:457:67: 0x104ba1e in ensureTotalCapacityPrecise (test)
+                const new_memory = try self.allocator.alignedAlloc(T, alignment, new_capacity);
+                                                                  ^
+/home/bvan-pae/zig/0.14.0-dev.225+45be80364/files/lib/std/array_list.zig:434:51: 0x104ad40 in ensureTotalCapacity (test)
+            return self.ensureTotalCapacityPrecise(better_capacity);
+                                                  ^
+/home/bvan-pae/zig/0.14.0-dev.225+45be80364/files/lib/std/array_list.zig:483:41: 0x1046530 in addOne (test)
+            try self.ensureTotalCapacity(newlen);
+                                        ^
+/home/bvan-pae/zig/0.14.0-dev.225+45be80364/files/lib/std/array_list.zig:262:49: 0x104084e in append (test)
+            const new_item_ptr = try self.addOne();
+                                                ^
+/home/bvan-pae/Desktop/perso/zig_projects/ready_set_bool/src/print_truth_table.zig:42:34: 0x104101b in replaceVariable (test)
+            try newFormula.append(value);
+                                 ^
+/home/bvan-pae/Desktop/perso/zig_projects/ready_set_bool/src/print_truth_table.zig:87:47: 0x1042837 in print_truth_table (test)
+        const newFormula = try replaceVariable(allocator, formula, nbVar, itBitSet);
+                                              ^
+/home/bvan-pae/Desktop/perso/zig_projects/ready_set_bool/src/print_truth_table.zig:112:26: 0x1043163 in test.truth_table error (test)
+    try print_truth_table(&allocator, rpn);
+                         ^
+/home/bvan-pae/zig/0.14.0-dev.225+45be80364/files/lib/compiler/test_runner.zig:155:25: 0x1052449 in mainTerminal (test)
+        if (test_fn.func()) |_| {
+                        ^
+/home/bvan-pae/zig/0.14.0-dev.225+45be80364/files/lib/compiler/test_runner.zig:35:28: 0x1047bbb in main (test)
+        return mainTerminal();
+                           ^
+/home/bvan-pae/zig/0.14.0-dev.225+45be80364/files/lib/std/start.zig:505:22: 0x1043639 in posixCallMainAndExit (test)
+            root.main();
+                     ^
+
+2 passed; 0 skipped; 1 failed.
+1 errors were logged.
+1 tests leaked memory.
+error: the following test command failed with exit code 1:
+/home/bvan-pae/Desktop/perso/zig_projects/ready_set_bool/.zig-cache/o/c300379f05bc636384f68cc29be4a7ee/test
