@@ -147,6 +147,14 @@ test "truth_table 4" {
     ast.deinit();
 }
 
+test "truth_table 4" {
+    var allocator = std.testing.allocator;
+    const rpn = "AB|C!AA!&|&B1&BB!B|=|>";
+    try print_truth_table(&allocator, rpn);
+    var ast = try BoolAST.generateAST(&allocator, rpn);
+    try ast.print(&allocator);
+}
+
 const ParsingError = @import("eval_formula.zig").ParsingError;
 
 test "truth_table error" {
