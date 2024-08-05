@@ -90,7 +90,7 @@ fn checkSetIntegrity(activeVariableBitSet: bit_set.IntegerBitSet(26), nbVar: u6)
     }
 }
 
-fn print_truth_table(allocator: *std.mem.Allocator, formula: []const u8) !void {
+pub fn print_truth_table(allocator: *std.mem.Allocator, formula: []const u8) !void {
     const activeVariableBitSet = countVar(formula);
     const nbVar: u6 = @intCast(activeVariableBitSet.count());
     try checkSetIntegrity(activeVariableBitSet, nbVar);
@@ -113,17 +113,19 @@ test "truth_table 1" {
     var allocator = std.testing.allocator;
     const rpn = "AB&C|";
     try print_truth_table(&allocator, rpn);
-    var ast = try BoolAST.generateAST(&allocator, rpn);
+    var ast = try BoolAST.init(&allocator, rpn);
     try ast.print(&allocator);
+    ast.deinit();
     std.debug.print("-----------------------------------------\n", .{});
 }
 
 test "truth_table 3" {
     var allocator = std.testing.allocator;
-    const rpn = "AB>";
+    const rpn = "A!B|";
     try print_truth_table(&allocator, rpn);
-    var ast = try BoolAST.generateAST(&allocator, rpn);
+    var ast = try BoolAST.init(&allocator, rpn);
     try ast.print(&allocator);
+    ast.deinit();
     std.debug.print("-----------------------------------------\n", .{});
 }
 
@@ -131,8 +133,18 @@ test "truth_table 2" {
     var allocator = std.testing.allocator;
     const rpn = "A!B|ABCD|A&>&BC&!&|1>";
     try print_truth_table(&allocator, rpn);
-    var ast = try BoolAST.generateAST(&allocator, rpn);
+    var ast = try BoolAST.init(&allocator, rpn);
     try ast.print(&allocator);
+    ast.deinit();
+}
+
+test "truth_table 4" {
+    var allocator = std.testing.allocator;
+    const rpn = "AB!&A!B&|"; //XOR in NNF
+    try print_truth_table(&allocator, rpn);
+    var ast = try BoolAST.init(&allocator, rpn);
+    try ast.print(&allocator);
+    ast.deinit();
 }
 
 const ParsingError = @import("eval_formula.zig").ParsingError;

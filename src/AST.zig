@@ -6,6 +6,7 @@ const ArrayList = std.ArrayList;
 
 const Stack = @import("Stack.zig").Stack;
 const StringStream = @import("StringStream.zig").StringStream;
+const eql = std.mem.eql;
 
 pub const Variable = struct {
     const Self = @This();
@@ -57,6 +58,7 @@ const Kind = union(enum) {
 };
 
 const Node = struct {
+    const Self = @This();
     kind: Kind,
     left: ?*Node = null,
     right: ?*Node = null,
@@ -72,6 +74,18 @@ const Node = struct {
             return e;
         }
     }
+
+    pub fn dup(self: *Self) !*Node {
+        const maybe_node = std.testing.allocator.create(Node);
+        if (maybe_node) |node| {
+            node.kind = self.kind;
+            node.left = null;
+            node.right = null;
+            return node;
+        } else |e| {
+            return e;
+        }
+    }
 };
 
 pub const BoolAST = struct {
@@ -80,22 +94,20 @@ pub const BoolAST = struct {
     allocator: *std.mem.Allocator,
 
     pub fn print(self: *Self, allocator: *std.mem.Allocator) !void {
-        defer self.allocator.destroy(self.root);
         std.debug.print("{s}", .{self.root.kind.toStr()});
 
         const pointerRight = "└──";
         const pointerLeft = if (self.root.right != null) "├──" else "└──";
         var ss = StringStream.init(allocator);
-        try printAST(self.root.left, &ss, pointerLeft, self.root.right != null);
-        try printAST(self.root.right, &ss, pointerRight, false);
+        try printAST(allocator, self.root.left, &ss, pointerLeft, self.root.right != null);
+        try printAST(allocator, self.root.right, &ss, pointerRight, false);
         std.debug.print("\n", .{});
     }
 
-    fn printAST(maybe_node: ?*Node, ss: *StringStream, pointer: []const u8, has_rhs: bool) !void {
+    fn printAST(allocator: *std.mem.Allocator, maybe_node: ?*Node, ss: *StringStream, pointer: []const u8, has_rhs: bool) !void {
         if (maybe_node) |node| {
-            defer std.testing.allocator.destroy(node);
             const padding = try ss.*.toStr();
-            defer std.testing.allocator.free(padding);
+            defer allocator.free(padding);
 
             std.debug.print("\n", .{});
             std.debug.print("{s}", .{padding});
@@ -115,12 +127,12 @@ pub const BoolAST = struct {
             const ptr_left = if (node.right != null) "├──" else "└──";
             const ptr_right = "└──";
 
-            try printAST(node.left, &paddingStream, ptr_left, node.right != null);
-            try printAST(node.right, &paddingStream, ptr_right, false);
+            try printAST(allocator, node.left, &paddingStream, ptr_left, node.right != null);
+            try printAST(allocator, node.right, &paddingStream, ptr_right, false);
         } else return;
     }
 
-    pub fn generateAST(allocator: *std.mem.Allocator, str: []const u8) !BoolAST {
+    pub fn init(allocator: *std.mem.Allocator, str: []const u8) !BoolAST {
         const rootNode = try genAST(allocator, str);
         return BoolAST{
             .root = rootNode,
@@ -145,8 +157,8 @@ pub const BoolAST = struct {
                     const node = try Node.init(Kind{ .operator = operator }, left, null);
                     try stack.push(node);
                 } else {
-                    const left = stack.pop();
                     const right = stack.pop();
+                    const left = stack.pop();
                     const node = try Node.init(Kind{ .operator = operator }, left, right);
                     try stack.push(node);
                 }
@@ -154,44 +166,179 @@ pub const BoolAST = struct {
         }
         return stack.pop();
     }
+
+    pub fn dup(maybe_node: ?*Node) !?*Node {
+        if (maybe_node) |node| {
+            var new_node = try node.dup();
+            new_node.left = try dup(node.left);
+            new_node.right = try dup(node.right);
+            return new_node;
+        } else return null;
+    }
+
+    pub fn toNNF(self: *Self) !void {
+        // try replaceIMP(self.root);
+        // try replaceEQL(self.root);
+        // try replaceXOR(self.root);
+        // try applyDeMorgan(self.root);
+        try removeMultipleNot(self.root);
+    }
+
+    fn removeMultipleNot(maybe_node: ?*Node) !void {
+        if (maybe_node) |node| {
+            const mb_nodelhs = node.left;
+            if (eql(u8, node.kind.toStr(), "NOT")) {
+                if (mb_nodelhs) |nodelhs| {
+                    if (eql(u8, nodelhs.kind.toStr(), "NOT")) {
+                        std.debug.print("YESSS\n", .{});
+                        node.* = nodelhs.left.?.*;
+                        std.testing.allocator.destroy(nodelhs.left.?);
+                        std.testing.allocator.destroy(nodelhs);
+                    }
+                }
+            }
+        }
+    }
+
+    fn applyDeMorgan(maybe_node: ?*Node) !void {
+        if (maybe_node) |node| {
+            if (eql(u8, node.kind.toStr(), "NOT")) {
+                if (node.left) |lhs| {
+                    const lhsValue = lhs.kind.toStr();
+                    const lhsReverseOperator = if (eql(u8, lhsValue, "AND")) Operator.@"|" else if (eql(u8, lhsValue, "OR")) Operator.@"&" else null;
+                    if (lhsReverseOperator) |lhsNewOperator| {
+                        defer std.testing.allocator.destroy(lhs);
+                        lhs.kind = Kind{ .operator = lhsNewOperator };
+
+                        const tmp_lhs = lhs.left;
+                        const tmp_rhs = lhs.right;
+                        lhs.left = try Node.init(Kind{ .operator = .@"!" }, null, null);
+                        lhs.right = try Node.init(Kind{ .operator = .@"!" }, null, null);
+                        lhs.left.?.left = tmp_lhs;
+                        lhs.right.?.left = tmp_rhs;
+
+                        node.* = lhs.*;
+                    }
+                }
+            }
+            try applyDeMorgan(node.left);
+            try applyDeMorgan(node.right);
+        }
+    }
+
+    fn replaceXOR(maybe_node: ?*Node) !void {
+        if (maybe_node) |node| {
+            if (eql(u8, node.kind.toStr(), "XOR")) {
+                std.debug.print("Found XOR\n", .{});
+                node.kind = Kind{ .operator = .@"|" };
+                const tmp_lhs = node.left;
+                const tmp_rhs = node.right;
+
+                node.left = try Node.init(Kind{ .operator = .@"&" }, null, null);
+                node.left.?.left = tmp_lhs;
+                node.left.?.right = try Node.init(Kind{ .operator = .@"!" }, null, null);
+                node.left.?.right.?.left = tmp_rhs;
+
+                node.right = try Node.init(Kind{ .operator = .@"&" }, null, null);
+                node.right.?.left = try Node.init(Kind{ .operator = .@"!" }, null, null);
+                node.right.?.left.?.left = try BoolAST.dup(tmp_lhs);
+                node.right.?.right = try BoolAST.dup(tmp_rhs);
+            }
+            try replaceXOR(node.left);
+            try replaceXOR(node.right);
+        }
+    }
+
+    fn replaceEQL(maybe_node: ?*Node) !void {
+        if (maybe_node) |node| {
+            if (eql(u8, node.kind.toStr(), "EQL")) {
+                std.debug.print("Found EQL\n", .{});
+                node.kind = Kind{ .operator = .@"|" };
+                const tmp_lhs = node.left;
+                const tmp_rhs = node.right;
+
+                node.left = try Node.init(Kind{ .operator = .@"&" }, null, null);
+                node.left.?.left = tmp_lhs;
+                node.left.?.right = tmp_rhs;
+
+                node.right = try Node.init(Kind{ .operator = .@"&" }, null, null);
+                node.right.?.left = try Node.init(Kind{ .operator = .@"!" }, null, null);
+                node.right.?.right = try Node.init(Kind{ .operator = .@"!" }, null, null);
+                node.right.?.left.?.left = try BoolAST.dup(tmp_lhs);
+                node.right.?.right.?.left = try BoolAST.dup(tmp_rhs);
+            }
+            try replaceEQL(node.left);
+            try replaceEQL(node.right);
+        }
+    }
+
+    fn replaceIMP(maybe_node: ?*Node) !void {
+        if (maybe_node) |node| {
+            if (eql(u8, node.kind.toStr(), "IMP")) {
+                node.kind = Kind{ .operator = .@"|" };
+                const tmp = node.left;
+                node.left = try Node.init(Kind{ .operator = .@"!" }, tmp, null);
+                std.debug.print("Found implication\n", .{});
+            }
+            try replaceIMP(node.left);
+            try replaceIMP(node.right);
+        }
+    }
+
+    pub fn deinit(self: *Self) void {
+        freeTree(self.allocator, self.root);
+    }
+
+    fn freeTree(allocator: *std.mem.Allocator, maybe_node: ?*Node) void {
+        if (maybe_node) |node| {
+            defer allocator.destroy(node);
+            freeTree(allocator, node.left);
+            freeTree(allocator, node.right);
+        }
+    }
 };
 
 test "generate ast from string" {
     const str = "11|0&";
     var allocator = std.testing.allocator;
-    var AST = try BoolAST.generateAST(&allocator, str);
+    var AST = try BoolAST.init(&allocator, str);
     try AST.print(&allocator);
+    AST.deinit();
     std.debug.print("------------------\n", .{});
 }
 
 test "generate ast from string 1" {
     const str = "01&1!0||";
     var allocator = std.testing.allocator;
-    var AST = try BoolAST.generateAST(&allocator, str);
+    var AST = try BoolAST.init(&allocator, str);
     try AST.print(&allocator);
+    AST.deinit();
     std.debug.print("------------------\n", .{});
 }
 
 test "generate ast from string 2" {
     const str = "01|1!10!&|&01&11!0|=|>";
     var allocator = std.testing.allocator;
-    var AST = try BoolAST.generateAST(&allocator, str);
+    var AST = try BoolAST.init(&allocator, str);
     try AST.print(&allocator);
+    AST.deinit();
     std.debug.print("------------------\n", .{});
 }
 
 test "generate ast from string 3" {
     const str = "1!0|1011|1&>&11&!&|";
     var allocator = std.testing.allocator;
-    var AST = try BoolAST.generateAST(&allocator, str);
+    var AST = try BoolAST.init(&allocator, str);
     try AST.print(&allocator);
+    AST.deinit();
     std.debug.print("------------------\n", .{});
 }
 
 test "generate ast from string with variable" {
     const str = "A!B|CBAA|B&>&AD&!&|";
     var allocator = std.testing.allocator;
-    var AST = try BoolAST.generateAST(&allocator, str);
+    var AST = try BoolAST.init(&allocator, str);
     try AST.print(&allocator);
+    AST.deinit();
     std.debug.print("------------------\n", .{});
 }
