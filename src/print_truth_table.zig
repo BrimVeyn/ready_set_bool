@@ -157,7 +157,7 @@ test "truth_table error" {
 
 test "truth_table error2" {
     var allocator = std.testing.allocator;
-    const rpn = "ABD||";
+    const rpn = "ABD&&";
     try std.testing.expectError(TruthTableError.AlphabeticSequenceBroken, print_truth_table(&allocator, rpn));
 }
 

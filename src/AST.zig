@@ -8,21 +8,57 @@ const Stack = @import("Stack.zig").Stack;
 const StringStream = @import("StringStream.zig").StringStream;
 const eql = std.mem.eql;
 
-pub const Variable = struct {
-    const Self = @This();
-    char: u8,
+// pub const Variable = struct {
+//     const Self = @This();
+//     char: u8,
+//
+//     pub fn toStr(self: *const Self) []const u8 {
+//         var buffer: [1]u8 = [_]u8{self.char};
+//         const slice = buffer[0..1];
+//         return slice;
+//     }
+//
+//     pub fn getVariable(c: u8) ?Variable {
+//         return switch (c) {
+//             'A'...'Z' => Variable{
+//                 .char = c,
+//             },
+//             else => null,
+//         };
+//     }
+// };
 
-    pub fn toStr(self: *const Self) []const u8 {
-        var buffer: [1]u8 = [_]u8{self.char};
-        const slice = buffer[0..1];
-        return slice;
-    }
+pub const Variable = enum(u8) {
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+    H,
+    I,
+    J,
+    K,
+    L,
+    M,
+    N,
+    O,
+    P,
+    Q,
+    R,
+    S,
+    T,
+    U,
+    V,
+    W,
+    X,
+    Y,
+    Z,
 
     pub fn getVariable(c: u8) ?Variable {
         return switch (c) {
-            'A'...'Z' => Variable{
-                .char = c,
-            },
+            'A'...'Z' => @enumFromInt(c - 'A'),
             else => null,
         };
     }
@@ -37,10 +73,7 @@ const Kind = union(enum) {
 
     pub fn toStr(self: Self) []const u8 {
         return switch (self) {
-            .value => return switch (self.value) {
-                Value.@"0" => "0",
-                Value.@"1" => "1",
-            },
+            .value => @tagName(self.value),
             .operator => return switch (self.operator) {
                 Operator.@"!" => "NOT",
                 Operator.@"&" => "AND",
@@ -49,10 +82,15 @@ const Kind = union(enum) {
                 Operator.@">" => "IMP",
                 Operator.@"=" => "EQL",
             },
-            .variable => {
-                const str = self.variable.toStr();
-                return str;
-            },
+            .variable => @tagName(self.variable),
+        };
+    }
+
+    pub fn toTagname(self: Self) []const u8 {
+        return switch (self) {
+            .value => @tagName(self.value),
+            .variable => @tagName(self.variable),
+            .operator => @tagName(self.operator),
         };
     }
 };
@@ -140,6 +178,12 @@ pub const BoolAST = struct {
         };
     }
 
+    fn clearNodeStack(allocator: *std.mem.Allocator, stack: Stack(*Node)) void {
+        for (0..stack.size) |it| {
+            freeTree(allocator, stack.data.items.ptr[it]);
+        }
+    }
+
     fn genAST(allocator: *std.mem.Allocator, rpn: []const u8) !*Node {
         var stack = try Stack(*Node).init(allocator);
         defer stack.deinit();
@@ -152,17 +196,28 @@ pub const BoolAST = struct {
                 const node = try Node.init(Kind{ .variable = variable }, null, null);
                 try stack.push(node);
             } else if (Operator.getOp(token)) |operator| {
-                if (operator == Operator.@"!") {
+                if (operator == Operator.@"!" and stack.size >= 1) {
                     const left = stack.pop();
                     const node = try Node.init(Kind{ .operator = operator }, left, null);
                     try stack.push(node);
-                } else {
+                } else if (stack.size >= 2) {
                     const right = stack.pop();
                     const left = stack.pop();
                     const node = try Node.init(Kind{ .operator = operator }, left, right);
                     try stack.push(node);
+                } else {
+                    clearNodeStack(allocator, stack);
+                    return error.wrongFormat;
                 }
+            } else {
+                clearNodeStack(allocator, stack);
+                return error.invalidCharacter;
             }
+        }
+
+        if (stack.size >= 2) {
+            clearNodeStack(allocator, stack);
+            return error.wrongFormat;
         }
         return stack.pop();
     }
@@ -177,26 +232,48 @@ pub const BoolAST = struct {
     }
 
     pub fn toNNF(self: *Self) !void {
-        // try replaceIMP(self.root);
-        // try replaceEQL(self.root);
-        // try replaceXOR(self.root);
-        // try applyDeMorgan(self.root);
         try removeMultipleNot(self.root);
+        try replaceIMP(self.root);
+        try replaceEQL(self.root);
+        try replaceXOR(self.root);
+        try applyDeMorgan(self.root);
+        try removeMultipleNot(self.root);
+    }
+
+    pub fn toRPN(self: *Self) ![]const u8 {
+        var ss = StringStream.init(self.allocator);
+        defer ss.deinit();
+        var stack = try Stack(*Node).init(self.allocator);
+        defer stack.deinit();
+
+        try treeToStack(&stack, self.root.left);
+        try treeToStack(&stack, self.root.right);
+        try stack.push(self.root);
+
+        for (0..stack.size) |it| {
+            try ss.append(stack.data.items.ptr[it].kind.toTagname());
+        }
+        return ss.toStr();
+    }
+
+    fn treeToStack(stack: *Stack(*Node), maybe_node: ?*Node) !void {
+        if (maybe_node) |node| {
+            try treeToStack(stack, node.left);
+            try treeToStack(stack, node.right);
+            try stack.*.push(node);
+        }
     }
 
     fn removeMultipleNot(maybe_node: ?*Node) !void {
         if (maybe_node) |node| {
-            const mb_nodelhs = node.left;
-            if (eql(u8, node.kind.toStr(), "NOT")) {
-                if (mb_nodelhs) |nodelhs| {
-                    if (eql(u8, nodelhs.kind.toStr(), "NOT")) {
-                        std.debug.print("YESSS\n", .{});
-                        node.* = nodelhs.left.?.*;
-                        std.testing.allocator.destroy(nodelhs.left.?);
-                        std.testing.allocator.destroy(nodelhs);
-                    }
-                }
+            while (eql(u8, node.kind.toStr(), "NOT") and eql(u8, node.left.?.kind.toStr(), "NOT")) {
+                const tmp = node.left.?.left.?.*;
+                std.testing.allocator.destroy(node.left.?.left.?);
+                std.testing.allocator.destroy(node.left.?);
+                node.* = tmp;
             }
+            try removeMultipleNot(node.left);
+            try removeMultipleNot(node.right);
         }
     }
 
@@ -212,10 +289,8 @@ pub const BoolAST = struct {
 
                         const tmp_lhs = lhs.left;
                         const tmp_rhs = lhs.right;
-                        lhs.left = try Node.init(Kind{ .operator = .@"!" }, null, null);
-                        lhs.right = try Node.init(Kind{ .operator = .@"!" }, null, null);
-                        lhs.left.?.left = tmp_lhs;
-                        lhs.right.?.left = tmp_rhs;
+                        lhs.left = try Node.init(Kind{ .operator = .@"!" }, tmp_lhs, null);
+                        lhs.right = try Node.init(Kind{ .operator = .@"!" }, tmp_rhs, null);
 
                         node.* = lhs.*;
                     }
@@ -229,15 +304,12 @@ pub const BoolAST = struct {
     fn replaceXOR(maybe_node: ?*Node) !void {
         if (maybe_node) |node| {
             if (eql(u8, node.kind.toStr(), "XOR")) {
-                std.debug.print("Found XOR\n", .{});
                 node.kind = Kind{ .operator = .@"|" };
                 const tmp_lhs = node.left;
                 const tmp_rhs = node.right;
 
-                node.left = try Node.init(Kind{ .operator = .@"&" }, null, null);
-                node.left.?.left = tmp_lhs;
-                node.left.?.right = try Node.init(Kind{ .operator = .@"!" }, null, null);
-                node.left.?.right.?.left = tmp_rhs;
+                node.left = try Node.init(Kind{ .operator = .@"&" }, tmp_lhs, null);
+                node.left.?.right = try Node.init(Kind{ .operator = .@"!" }, tmp_rhs, null);
 
                 node.right = try Node.init(Kind{ .operator = .@"&" }, null, null);
                 node.right.?.left = try Node.init(Kind{ .operator = .@"!" }, null, null);
@@ -252,14 +324,11 @@ pub const BoolAST = struct {
     fn replaceEQL(maybe_node: ?*Node) !void {
         if (maybe_node) |node| {
             if (eql(u8, node.kind.toStr(), "EQL")) {
-                std.debug.print("Found EQL\n", .{});
                 node.kind = Kind{ .operator = .@"|" };
                 const tmp_lhs = node.left;
                 const tmp_rhs = node.right;
 
-                node.left = try Node.init(Kind{ .operator = .@"&" }, null, null);
-                node.left.?.left = tmp_lhs;
-                node.left.?.right = tmp_rhs;
+                node.left = try Node.init(Kind{ .operator = .@"&" }, tmp_lhs, tmp_rhs);
 
                 node.right = try Node.init(Kind{ .operator = .@"&" }, null, null);
                 node.right.?.left = try Node.init(Kind{ .operator = .@"!" }, null, null);
@@ -277,8 +346,8 @@ pub const BoolAST = struct {
             if (eql(u8, node.kind.toStr(), "IMP")) {
                 node.kind = Kind{ .operator = .@"|" };
                 const tmp = node.left;
+
                 node.left = try Node.init(Kind{ .operator = .@"!" }, tmp, null);
-                std.debug.print("Found implication\n", .{});
             }
             try replaceIMP(node.left);
             try replaceIMP(node.right);

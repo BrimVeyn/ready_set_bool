@@ -1,6 +1,7 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const color = @import("Colors.zig").ansi;
+const ParsingError = @import("eval_formula.zig").ParsingError;
 
 pub fn Stack(comptime T: type) type {
     return struct {
