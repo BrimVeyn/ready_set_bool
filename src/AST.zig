@@ -240,6 +240,44 @@ pub const BoolAST = struct {
         try removeMultipleNot(self.root);
     }
 
+    pub fn toCNF(self: *Self) !void {
+        try distribute(self.allocator, self.root);
+    }
+
+    fn distribute(allocator: *std.mem.Allocator, maybe_node: ?*Node) !void {
+        if (maybe_node) |node| {
+            if (eql(u8, node.kind.toStr(), "OR")) {
+                if (eql(u8, node.left.?.kind.toStr(), "AND") or eql(u8, node.right.?.kind.toStr(), "AND")) {
+                    const rpnleft = try nodeToRPN(allocator, node.left);
+                    defer allocator.free(rpnleft);
+                    const rpnright = try nodeToRPN(allocator, node.right);
+                    defer allocator.free(rpnright);
+
+                    std.debug.print("rpn = {s}\n", .{rpnright});
+                    std.debug.print("rpn = {s}\n", .{rpnleft});
+                }
+            }
+            try distribute(allocator, node.left);
+            try distribute(allocator, node.right);
+        }
+    }
+
+    pub fn nodeToRPN(allocator: *std.mem.Allocator, node: ?*Node) ![]const u8 {
+        var ss = StringStream.init(allocator);
+        defer ss.deinit();
+        var stack = try Stack(*Node).init(allocator);
+        defer stack.deinit();
+
+        try treeToStack(&stack, node.?.left);
+        try treeToStack(&stack, node.?.right);
+        try stack.push(node.?);
+
+        for (0..stack.size) |it| {
+            try ss.append(stack.data.items.ptr[it].kind.toTagname());
+        }
+        return ss.toStr();
+    }
+
     pub fn toRPN(self: *Self) ![]const u8 {
         var ss = StringStream.init(self.allocator);
         defer ss.deinit();

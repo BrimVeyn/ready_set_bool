@@ -147,6 +147,42 @@ test "truth_table 4" {
     ast.deinit();
 }
 
+test "truth_table 5" {
+    var allocator = std.testing.allocator;
+    const rpn = "AB&A!B!&|"; //XOR in NNF
+    try print_truth_table(&allocator, rpn);
+    var ast = try BoolAST.init(&allocator, rpn);
+    try ast.print(&allocator);
+    ast.deinit();
+}
+
+test "truth_table 6" {
+    var allocator = std.testing.allocator;
+    const rpn = "A!B|AB!|&"; //XOR in NNF
+    try print_truth_table(&allocator, rpn);
+    var ast = try BoolAST.init(&allocator, rpn);
+    try ast.print(&allocator);
+    ast.deinit();
+}
+
+test "truth_table 7" {
+    var allocator = std.testing.allocator;
+    const rpn = "AB&C|"; //XOR in NNF
+    try print_truth_table(&allocator, rpn);
+    var ast = try BoolAST.init(&allocator, rpn);
+    try ast.print(&allocator);
+    ast.deinit();
+}
+
+test "truth_table 8" {
+    var allocator = std.testing.allocator;
+    const rpn = "CA|CB|&"; //XOR in NNF
+    try print_truth_table(&allocator, rpn);
+    var ast = try BoolAST.init(&allocator, rpn);
+    try ast.print(&allocator);
+    ast.deinit();
+}
+
 const ParsingError = @import("eval_formula.zig").ParsingError;
 
 test "truth_table error" {
