@@ -28,6 +28,17 @@ pub const StringStream = struct {
         try self.buffer.append(c);
     }
 
+    pub fn concat(allocator: *std.mem.Allocator, ss1: *StringStream, ss2: *StringStream) !StringStream {
+        var result = StringStream.init(allocator);
+        const slice_ss1 = try ss1.toStr();
+        defer allocator.free(slice_ss1);
+        const slice_ss2 = try ss2.*.toStr();
+        defer allocator.free(slice_ss2);
+        try result.append(slice_ss1);
+        try result.append(slice_ss2);
+        return result;
+    }
+
     pub fn deinit(self: *Self) void {
         self.buffer.deinit();
     }

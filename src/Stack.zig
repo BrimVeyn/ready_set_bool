@@ -27,6 +27,11 @@ pub fn Stack(comptime T: type) type {
             return self.data.pop();
         }
 
+        pub fn popFront(self: *Self) T {
+            self.size -= 1;
+            return self.data.orderedRemove(0);
+        }
+
         pub fn deinit(self: *Self) void {
             self.data.deinit();
         }

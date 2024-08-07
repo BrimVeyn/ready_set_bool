@@ -8,26 +8,6 @@ const Stack = @import("Stack.zig").Stack;
 const StringStream = @import("StringStream.zig").StringStream;
 const eql = std.mem.eql;
 
-// pub const Variable = struct {
-//     const Self = @This();
-//     char: u8,
-//
-//     pub fn toStr(self: *const Self) []const u8 {
-//         var buffer: [1]u8 = [_]u8{self.char};
-//         const slice = buffer[0..1];
-//         return slice;
-//     }
-//
-//     pub fn getVariable(c: u8) ?Variable {
-//         return switch (c) {
-//             'A'...'Z' => Variable{
-//                 .char = c,
-//             },
-//             else => null,
-//         };
-//     }
-// };
-
 pub const Variable = enum(u8) {
     A,
     B,
@@ -242,19 +222,150 @@ pub const BoolAST = struct {
 
     pub fn toCNF(self: *Self) !void {
         try distribute(self.allocator, self.root);
+        try applyComplement(self.allocator, self.root);
+        try applyIdentity(self.allocator, self.root);
+        try flattenAndReorder(self.allocator, self.root);
+    }
+
+    fn flattenAndReorder(allocator: *std.mem.Allocator, maybe_node: ?*Node) !void {
+        if (maybe_node) |node| {
+            var stack = try Stack(*Node).init(allocator);
+            try collectANDs(allocator, &stack, node);
+            defer stack.deinit();
+            var current = maybe_node;
+            if (stack.size > 2) {
+                while (stack.size > 2) {
+                    current.?.left = try dup(stack.popFront());
+                    current.?.right = try Node.init(Kind{ .operator = .@"&" }, null, null);
+                    current = current.?.right;
+                }
+            }
+            stack.print();
+        }
+    }
+
+    fn collectANDs(allocator: *std.mem.Allocator, stack: *Stack(*Node), node: *Node) !void {
+        if (eql(u8, node.kind.toStr(), "AND")) {
+            if (node.left) |lhs| {
+                try collectANDs(allocator, stack, lhs);
+            }
+            if (node.right) |rhs| {
+                try collectANDs(allocator, stack, rhs);
+            }
+        } else {
+            try stack.push(node);
+        }
+    }
+
+    fn applyIdentity(allocator: *std.mem.Allocator, maybe_node: ?*Node) !void {
+        if (maybe_node) |node| {
+            //Identity law --> A V 0 <=> A || A ^ 1 <=> A
+            const token = node.kind.toStr();
+            const isTokenAND = eql(u8, token, "AND");
+            const isTokenOR = eql(u8, token, "OR");
+            if (isTokenAND or isTokenOR) {
+                const operand = if (isTokenOR) "0" else "1";
+                if (node.left) |lhs| {
+                    if (node.right) |rhs| {
+                        const AisBool = eql(u8, lhs.kind.toStr(), operand);
+                        const BisBool = eql(u8, rhs.kind.toStr(), operand);
+                        const toDup = if (AisBool) node.right else if (BisBool) node.left else null;
+                        const toRemove = if (AisBool) node.left else if (BisBool) node.right else null;
+
+                        if (AisBool or BisBool) {
+                            const new_node = try dup(toDup);
+                            defer allocator.destroy(new_node.?);
+
+                            freeTree(allocator, toRemove);
+                            freeTree(allocator, toDup);
+                            node.left = null;
+                            node.right = null;
+
+                            node.* = new_node.?.*;
+                        }
+                    }
+                }
+            }
+            try applyIdentity(allocator, node.left);
+            try applyIdentity(allocator, node.right);
+        }
+    }
+
+    fn applyComplement(allocator: *std.mem.Allocator, maybe_node: ?*Node) !void {
+        if (maybe_node) |node| {
+            //Complement law --> A & !A <=> 0 || A + !A = 1
+            const token = node.kind.toStr();
+            const isTokenAND = eql(u8, token, "AND");
+            const isTokenOR = eql(u8, token, "OR");
+
+            if (isTokenOR or isTokenAND) {
+                const isLhsNOT = eql(u8, node.left.?.kind.toStr(), "NOT");
+                const isRhsNOT = eql(u8, node.right.?.kind.toStr(), "NOT");
+
+                if ((isLhsNOT and !isRhsNOT) or (!isLhsNOT and isRhsNOT)) {
+                    const newValue = if (isTokenAND) Value.@"0" else Value.@"1";
+                    var A = if (isLhsNOT) node.left.?.left else node.right.?.left;
+                    var B = if (isLhsNOT) node.right else node.left;
+
+                    if (eql(u8, A.?.kind.toStr(), B.?.kind.toStr())) {
+                        freeTree(allocator, node.left);
+                        freeTree(allocator, node.right);
+                        node.kind = Kind{ .value = newValue };
+                        node.left = null;
+                        node.right = null;
+                    }
+                }
+            }
+
+            try applyComplement(allocator, node.left);
+            try applyComplement(allocator, node.right);
+        }
     }
 
     fn distribute(allocator: *std.mem.Allocator, maybe_node: ?*Node) !void {
         if (maybe_node) |node| {
             if (eql(u8, node.kind.toStr(), "OR")) {
-                if (eql(u8, node.left.?.kind.toStr(), "AND") or eql(u8, node.right.?.kind.toStr(), "AND")) {
-                    const rpnleft = try nodeToRPN(allocator, node.left);
-                    defer allocator.free(rpnleft);
-                    const rpnright = try nodeToRPN(allocator, node.right);
-                    defer allocator.free(rpnright);
+                const isLhsAND = eql(u8, node.left.?.kind.toStr(), "AND");
+                const isRhsAND = eql(u8, node.right.?.kind.toStr(), "AND");
 
-                    std.debug.print("rpn = {s}\n", .{rpnright});
-                    std.debug.print("rpn = {s}\n", .{rpnleft});
+                if (isLhsAND or isRhsAND) {
+                    node.kind = Kind{ .operator = .@"&" };
+                    //Distributivity law --> A V (B & C) <=> (A V B) & (A V C);
+                    //Commutative law --> A V B <=> B V A || A & B <=> B & A;
+                    var A: StringStream = undefined;
+                    var B: StringStream = undefined;
+                    var C: StringStream = undefined;
+                    defer A.deinit();
+                    defer B.deinit();
+                    defer C.deinit();
+
+                    if (isRhsAND) {
+                        A = try nodeToRPN(allocator, node.left);
+                        B = try nodeToRPN(allocator, node.right.?.left);
+                        C = try nodeToRPN(allocator, node.right.?.right);
+                    } else if (isLhsAND and !isRhsAND) {
+                        A = try nodeToRPN(allocator, node.right);
+                        B = try nodeToRPN(allocator, node.left.?.left);
+                        C = try nodeToRPN(allocator, node.left.?.right);
+                    }
+
+                    var new_lhs = try StringStream.concat(allocator, &A, &B);
+                    defer new_lhs.deinit();
+                    try new_lhs.appendChar('|');
+                    const new_lhs_str = try new_lhs.toStr();
+                    defer allocator.free(new_lhs_str);
+
+                    var new_rhs = try StringStream.concat(allocator, &A, &C);
+                    defer new_rhs.deinit();
+                    try new_rhs.appendChar('|');
+                    const new_rhs_str = try new_rhs.toStr();
+                    defer allocator.free(new_rhs_str);
+
+                    freeTree(allocator, node.left);
+                    freeTree(allocator, node.right);
+
+                    node.left = try genAST(allocator, new_lhs_str);
+                    node.right = try genAST(allocator, new_rhs_str);
                 }
             }
             try distribute(allocator, node.left);
@@ -262,9 +373,8 @@ pub const BoolAST = struct {
         }
     }
 
-    pub fn nodeToRPN(allocator: *std.mem.Allocator, node: ?*Node) ![]const u8 {
+    fn nodeToRPN(allocator: *std.mem.Allocator, node: ?*Node) !StringStream {
         var ss = StringStream.init(allocator);
-        defer ss.deinit();
         var stack = try Stack(*Node).init(allocator);
         defer stack.deinit();
 
@@ -275,7 +385,7 @@ pub const BoolAST = struct {
         for (0..stack.size) |it| {
             try ss.append(stack.data.items.ptr[it].kind.toTagname());
         }
-        return ss.toStr();
+        return ss;
     }
 
     pub fn toRPN(self: *Self) ![]const u8 {
@@ -443,6 +553,33 @@ test "generate ast from string 3" {
 
 test "generate ast from string with variable" {
     const str = "A!B|CBAA|B&>&AD&!&|";
+    var allocator = std.testing.allocator;
+    var AST = try BoolAST.init(&allocator, str);
+    try AST.print(&allocator);
+    AST.deinit();
+    std.debug.print("------------------\n", .{});
+}
+
+test "SandBox 2" {
+    const str = "AB&C&D&";
+    var allocator = std.testing.allocator;
+    var AST = try BoolAST.init(&allocator, str);
+    try AST.print(&allocator);
+    AST.deinit();
+    std.debug.print("------------------\n", .{});
+}
+
+test "SandBox 3" {
+    const str = "AB&CD&&";
+    var allocator = std.testing.allocator;
+    var AST = try BoolAST.init(&allocator, str);
+    try AST.print(&allocator);
+    AST.deinit();
+    std.debug.print("------------------\n", .{});
+}
+
+test "SandBox" {
+    const str = "ABCD&&&";
     var allocator = std.testing.allocator;
     var AST = try BoolAST.init(&allocator, str);
     try AST.print(&allocator);
