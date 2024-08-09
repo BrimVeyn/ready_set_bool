@@ -1,0 +1,154 @@
+1/1 conjunctive_normal_form.test.CNF basic 1...RPN Formula: A!B|ABCD|A&>&BC&!&|1>
+IMP
+├──OR
+│  ├──OR
+│  │  ├──NOT
+│  │  │  └──A
+│  │  └──B
+│  └──AND
+│     ├──AND
+│     │  ├──A
+│     │  └──IMP
+│     │     ├──B
+│     │     └──AND
+│     │        ├──OR
+│     │        │  ├──C
+│     │        │  └──D
+│     │        └──A
+│     └──NOT
+│        └──AND
+│           ├──B
+│           └──C
+└──1
+Distribute
+AND
+├──AND
+│  ├──OR
+│  │  ├──1
+│  │  └──A
+│  └──OR
+│     ├──1
+│     └──NOT
+│        └──B
+└──OR
+   ├──1
+   └──OR
+      ├──AND
+      │  ├──OR
+      │  │  ├──NOT
+      │  │  │  └──A
+      │  │  └──B
+      │  └──OR
+      │     ├──NOT
+      │     │  └──A
+      │     └──AND
+      │        ├──OR
+      │        │  ├──NOT
+      │        │  │  └──A
+      │        │  └──NOT
+      │        │     └──C
+      │        └──OR
+      │           ├──NOT
+      │           │  └──A
+      │           └──NOT
+      │              └──D
+      └──NOT
+         └──OR
+            ├──NOT
+            │  └──B
+            └──NOT
+               └──C
+Complement
+AND
+├──AND
+│  ├──OR
+│  │  ├──1
+│  │  └──A
+│  └──OR
+│     ├──1
+│     └──NOT
+│        └──B
+└──OR
+   ├──1
+   └──OR
+      ├──AND
+      │  ├──OR
+      │  │  ├──NOT
+      │  │  │  └──A
+      │  │  └──B
+      │  └──OR
+      │     ├──NOT
+      │     │  └──A
+      │     └──AND
+      │        ├──OR
+      │        │  ├──NOT
+      │        │  │  └──A
+      │        │  └──NOT
+      │        │     └──C
+      │        └──OR
+      │           ├──NOT
+      │           │  └──A
+      │           └──NOT
+      │              └──D
+      └──NOT
+         └──OR
+            ├──NOT
+            │  └──B
+            └──NOT
+               └──C
+Identity
+AND
+├──AND
+│  ├──OR
+│  │  ├──1
+│  │  └──A
+│  └──OR
+│     ├──1
+│     └──NOT
+│        └──B
+└──OR
+   ├──1
+   └──OR
+      ├──AND
+      │  ├──OR
+      │  │  ├──NOT
+      │  │  │  └──A
+      │  │  └──B
+      │  └──OR
+      │     ├──NOT
+      │     │  └──A
+      │     └──AND
+      │        ├──OR
+      │        │  ├──NOT
+      │        │  │  └──A
+      │        │  └──NOT
+      │        │     └──C
+      │        └──OR
+      │           ├──NOT
+      │           │  └──A
+      │           └──NOT
+      │              └──D
+      └──NOT
+         └──OR
+            ├──NOT
+            │  └──B
+            └──NOT
+               └──C
+Annulment
+AND
+├──AND
+│  ├──1
+│  └──1
+└──1
+AND
+├──1
+└──AND
+   ├──1
+   └──1
+CNF RPN Formula: 111&&
+-----------------------------
+RPN Formula: ABC!!
+RPN Formula: A !
+RPN Formula: &A !
+OK
+All 1 tests passed.

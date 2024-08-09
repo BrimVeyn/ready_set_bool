@@ -212,48 +212,275 @@ pub const BoolAST = struct {
     }
 
     pub fn toNNF(self: *Self) !void {
-        try removeMultipleNot(self.root);
-        try replaceIMP(self.root);
-        try replaceEQL(self.root);
-        try replaceXOR(self.root);
-        try applyDeMorgan(self.root);
-        try removeMultipleNot(self.root);
-    }
-
-    pub fn toCNF(self: *Self) !void {
-        try distribute(self.allocator, self.root);
-        try applyComplement(self.allocator, self.root);
-        try applyIdentity(self.allocator, self.root);
-        try flattenAndReorder(self.allocator, self.root);
-    }
-
-    fn flattenAndReorder(allocator: *std.mem.Allocator, maybe_node: ?*Node) !void {
-        if (maybe_node) |node| {
-            var stack = try Stack(*Node).init(allocator);
-            try collectANDs(allocator, &stack, node);
-            defer stack.deinit();
-            var current = maybe_node;
-            if (stack.size > 2) {
-                while (stack.size > 2) {
-                    current.?.left = try dup(stack.popFront());
-                    current.?.right = try Node.init(Kind{ .operator = .@"&" }, null, null);
-                    current = current.?.right;
-                }
-            }
-            stack.print();
+        try self.print(self.allocator);
+        for (0..100) |_| {
+            const oldTree = try dup(self.root);
+            defer freeTree(self.allocator, oldTree);
+            try removeMultipleNot(self.root);
+            try replaceIMP(self.root);
+            try replaceEQL(self.root);
+            try replaceXOR(self.root);
+            try applyDeMorgan(self.root);
+            try removeMultipleNot(self.root);
+            if (treeEql(oldTree, self.root)) break;
+            try self.print(self.allocator);
         }
     }
 
-    fn collectANDs(allocator: *std.mem.Allocator, stack: *Stack(*Node), node: *Node) !void {
-        if (eql(u8, node.kind.toStr(), "AND")) {
-            if (node.left) |lhs| {
-                try collectANDs(allocator, stack, lhs);
+    pub fn toCNF(self: *Self) !void {
+        for (0..100) |_| {
+            const treeIsCNF = try self.isCNF();
+            const oldTree = try dup(self.root);
+            try distributeORs(self.allocator, self.root);
+            defer freeTree(self.allocator, oldTree);
+            try applyIdentity(self.allocator, self.root);
+            try applyAnnulment(self.allocator, self.root);
+            try flattenAndReorder(self.allocator, self.root, Operator.@"&", treeIsCNF);
+            try flattenAndReorder(self.allocator, self.root, Operator.@"|", treeIsCNF);
+            if (treeEql(oldTree, self.root)) break;
+            // std.debug.print("IS CNF ? {}\n", .{treeIsCNF});
+            try self.print(self.allocator);
+        }
+    }
+
+    fn collectORs(stack: *Stack(*Node), maybe_node: ?*Node) !void {
+        if (maybe_node) |node| {
+            if (eql(u8, node.kind.toTagname(), "|")) {
+                try stack.push(node);
             }
-            if (node.right) |rhs| {
-                try collectANDs(allocator, stack, rhs);
+            try collectORs(stack, node.left);
+            try collectORs(stack, node.right);
+        }
+    }
+
+    fn isCNF(self: *Self) !bool {
+        var stack = try Stack(*Node).init(self.allocator);
+        defer stack.deinit();
+        try collectORs(&stack, self.root);
+        for (stack.data.items) |item| {
+            //To be in CNF OR cannot have a OR to its left, neither a AND (NNF basic)
+            if (item.left) |lhs| {
+                switch (lhs.kind) {
+                    .operator => switch (lhs.kind.operator) {
+                        .@"&", .@"|" => return false,
+                        else => {},
+                    },
+                    else => {},
+                }
             }
-        } else {
-            try stack.push(node);
+            //Same applies here except that OR can have OR has a right child
+            if (item.right) |rhs| {
+                switch (rhs.kind) {
+                    .operator => switch (rhs.kind.operator) {
+                        .@"&" => return false,
+                        else => {},
+                    },
+                    else => {},
+                }
+            }
+        }
+        return true;
+    }
+
+    fn applyAnnulment(allocator: *std.mem.Allocator, maybe_node: ?*Node) !void {
+        if (maybe_node) |node| {
+            //Annulment law --> A ^ 0 <=> 0 || A V 1 <=> 1
+            const isTokenOR = eql(u8, node.kind.toStr(), "OR");
+            const isTokenAND = eql(u8, node.kind.toStr(), "AND");
+            const replaceBy = if (isTokenOR) "1" else "0";
+            if (isTokenOR or isTokenAND) {
+                if (node.left == null or node.right == null) return;
+                const isOneOfChildsBool = eql(u8, node.left.?.kind.toStr(), replaceBy) or eql(u8, node.right.?.kind.toStr(), replaceBy);
+
+                if (isOneOfChildsBool) {
+                    freeTree(allocator, node.left);
+                    freeTree(allocator, node.right);
+                    node.left = null;
+                    node.right = null;
+                    node.kind = Kind{ .value = @enumFromInt(replaceBy[0]) };
+                }
+            }
+            try applyAnnulment(allocator, node.left);
+            try applyAnnulment(allocator, node.right);
+        }
+    }
+
+    fn applyComplementLaw(allocator: *std.mem.Allocator, stack: *Stack(*Node), operator: Operator) !void {
+        var it: usize = 0;
+        const value = if (operator == Operator.@"&") Value.@"0" else Value.@"1";
+        for (stack.data.items) |maybe_not| {
+            var inner_it: usize = 0;
+            if (switch (maybe_not.kind) {
+                .value => true,
+                .variable => true,
+                .operator => false,
+            }) {
+                for (stack.data.items) |maybe_self| {
+                    if (switch (maybe_self.kind) {
+                        .value => true,
+                        .variable => true,
+                        .operator => false,
+                    } and (eql(u8, maybe_not.kind.toTagname(), maybe_self.kind.toTagname())) and (it != inner_it)) {
+                        freeTree(allocator, stack.popIndex(inner_it));
+                        try applyComplementLaw(allocator, stack, operator);
+                        return;
+                    }
+                    inner_it += 1;
+                }
+            }
+            if (eql(u8, maybe_not.kind.toTagname(), "!")) {
+                const nottedValue = maybe_not.left.?;
+                for (stack.data.items) |item| {
+                    if (eql(u8, nottedValue.kind.toTagname(), item.kind.toTagname())) {
+                        item.kind = Kind{ .value = value };
+                        freeTree(allocator, stack.popIndex(it));
+                        try applyComplementLaw(allocator, stack, operator);
+                        return;
+                    }
+                }
+            }
+            it += 1;
+        }
+    }
+
+    fn isNotted(allocator: *std.mem.Allocator, item: *Node, stack: *Stack(*Node)) !bool {
+        var isNtGenerative = false;
+        for (stack.data.items) |maybenotted| {
+            switch (maybenotted.kind) {
+                .operator => switch (maybenotted.kind.operator) {
+                    .@"!" => {
+                        const mn_lhs = maybenotted.left.?;
+                        if (eql(u8, item.kind.toTagname(), mn_lhs.kind.toTagname())) {
+                            freeTree(allocator, maybenotted.left);
+                            maybenotted.left = null;
+                            maybenotted.right = null;
+                            maybenotted.kind = Kind{ .value = .@"0" };
+                            isNtGenerative = true;
+                        }
+                    },
+                    else => {},
+                },
+                else => {},
+            }
+        }
+        if (isNtGenerative) return false else return true;
+    }
+
+    fn inclusionTheorem(allocator: *std.mem.Allocator, stack: *Stack(*Node)) !void {
+        for (stack.data.items) |item| {
+            var isGenerative = true;
+            switch (item.kind) {
+                .variable => {
+                    isGenerative = try isNotted(allocator, item, stack);
+                },
+                else => {},
+            }
+            if (!isGenerative) try annulVariable(stack, item.kind.toTagname());
+        }
+    }
+
+    fn annulVariable(stack: *Stack(*Node), tagName: []const u8) !void {
+        for (stack.data.items) |item| {
+            if (eql(u8, tagName, item.kind.toTagname())) {
+                item.kind = Kind{ .value = .@"0" };
+            }
+        }
+    }
+
+    fn collectVariable(node: *Node, variableStack: *Stack(*Node)) !void {
+        if (node.left) |lhs| {
+            switch (lhs.kind) {
+                .variable => try variableStack.push(lhs),
+                .operator => switch (lhs.kind.operator) {
+                    .@"!" => try variableStack.push(lhs),
+                    else => try collectVariable(lhs, variableStack),
+                },
+                else => {},
+            }
+        }
+        if (node.right) |rhs| {
+            switch (rhs.kind) {
+                .variable => try variableStack.push(rhs),
+                .operator => switch (rhs.kind.operator) {
+                    .@"!" => try variableStack.push(rhs),
+                    else => try collectVariable(rhs, variableStack),
+                },
+                else => {},
+            }
+        }
+    }
+
+    fn collectOPVariable(stack: *Stack(*Node), variableStack: *Stack(*Node)) !void {
+        for (stack.data.items) |item| {
+            try collectVariable(item, variableStack);
+        }
+    }
+
+    fn flattenAndReorder(allocator: *std.mem.Allocator, maybe_node: ?*Node, operator: Operator, CNF: bool) !void {
+        if (maybe_node) |node| {
+            var stack = try Stack(*Node).init(allocator);
+            defer stack.deinit();
+            try collectOP(allocator, &stack, node, operator);
+
+            var current = maybe_node;
+            if (stack.size >= 2) {
+                //Complement law ---> (A + !A) = 0 || (A & !A) = 1
+                //Idempotent law ---> (A + A) = A || (A & A) = A
+                try applyComplementLaw(allocator, &stack, operator);
+                //Inclusion theorem ---> (A + B) & (A + !B) & (A + B)... (+)&(+)&... = A
+                if (CNF and operator == Operator.@"&") {
+                    var variableStack = try Stack(*Node).init(allocator);
+                    defer variableStack.deinit();
+                    try collectOPVariable(&stack, &variableStack);
+
+                    try inclusionTheorem(allocator, &variableStack);
+                }
+
+                freeTree(allocator, current.?.left);
+                freeTree(allocator, current.?.right);
+
+                while (stack.size > 2) {
+                    current.?.left = stack.popFront();
+                    current.?.right = try Node.init(Kind{ .operator = operator }, null, null);
+                    current = current.?.right;
+                }
+
+                if (stack.size == 2) {
+                    current.?.left = stack.popFront();
+                    current.?.right = stack.popFront();
+                } else if (stack.size == 1) {
+                    const toFree = stack.popFront();
+                    current.?.kind = toFree.kind;
+                    current.?.left = null;
+                    current.?.right = null;
+
+                    freeTree(allocator, toFree);
+                }
+            } else for (0..stack.size) |i| freeTree(allocator, stack.data.items.ptr[i]);
+
+            try flattenAndReorder(allocator, node.left, operator, CNF);
+            try flattenAndReorder(allocator, node.right, operator, CNF);
+        }
+    }
+
+    fn pushNode(node: *Node, stack: *Stack(*Node)) !void {
+        const nodeDup = try dup(node);
+        if (nodeDup) |newNode| {
+            try stack.push(newNode);
+        }
+    }
+
+    fn collectOP(allocator: *std.mem.Allocator, stack: *Stack(*Node), maybe_node: ?*Node, operator: Operator) !void {
+        if (maybe_node) |node| {
+            switch (node.kind) {
+                .operator => {
+                    if (node.kind.operator == operator) {
+                        if (node.left) |lhs| try collectOP(allocator, stack, lhs, operator);
+                        if (node.right) |rhs| try collectOP(allocator, stack, rhs, operator);
+                    } else try pushNode(node, stack);
+                },
+                else => try pushNode(node, stack),
+            }
         }
     }
 
@@ -263,8 +490,10 @@ pub const BoolAST = struct {
             const token = node.kind.toStr();
             const isTokenAND = eql(u8, token, "AND");
             const isTokenOR = eql(u8, token, "OR");
+
             if (isTokenAND or isTokenOR) {
                 const operand = if (isTokenOR) "0" else "1";
+
                 if (node.left) |lhs| {
                     if (node.right) |rhs| {
                         const AisBool = eql(u8, lhs.kind.toStr(), operand);
@@ -291,40 +520,11 @@ pub const BoolAST = struct {
         }
     }
 
-    fn applyComplement(allocator: *std.mem.Allocator, maybe_node: ?*Node) !void {
-        if (maybe_node) |node| {
-            //Complement law --> A & !A <=> 0 || A + !A = 1
-            const token = node.kind.toStr();
-            const isTokenAND = eql(u8, token, "AND");
-            const isTokenOR = eql(u8, token, "OR");
-
-            if (isTokenOR or isTokenAND) {
-                const isLhsNOT = eql(u8, node.left.?.kind.toStr(), "NOT");
-                const isRhsNOT = eql(u8, node.right.?.kind.toStr(), "NOT");
-
-                if ((isLhsNOT and !isRhsNOT) or (!isLhsNOT and isRhsNOT)) {
-                    const newValue = if (isTokenAND) Value.@"0" else Value.@"1";
-                    var A = if (isLhsNOT) node.left.?.left else node.right.?.left;
-                    var B = if (isLhsNOT) node.right else node.left;
-
-                    if (eql(u8, A.?.kind.toStr(), B.?.kind.toStr())) {
-                        freeTree(allocator, node.left);
-                        freeTree(allocator, node.right);
-                        node.kind = Kind{ .value = newValue };
-                        node.left = null;
-                        node.right = null;
-                    }
-                }
-            }
-
-            try applyComplement(allocator, node.left);
-            try applyComplement(allocator, node.right);
-        }
-    }
-
-    fn distribute(allocator: *std.mem.Allocator, maybe_node: ?*Node) !void {
+    fn distributeORs(allocator: *std.mem.Allocator, maybe_node: ?*Node) !void {
         if (maybe_node) |node| {
             if (eql(u8, node.kind.toStr(), "OR")) {
+                if (node.left == null or node.right == null) return;
+
                 const isLhsAND = eql(u8, node.left.?.kind.toStr(), "AND");
                 const isRhsAND = eql(u8, node.right.?.kind.toStr(), "AND");
 
@@ -368,8 +568,8 @@ pub const BoolAST = struct {
                     node.right = try genAST(allocator, new_rhs_str);
                 }
             }
-            try distribute(allocator, node.left);
-            try distribute(allocator, node.right);
+            try distributeORs(allocator, node.left);
+            try distributeORs(allocator, node.right);
         }
     }
 
@@ -500,6 +700,17 @@ pub const BoolAST = struct {
             try replaceIMP(node.left);
             try replaceIMP(node.right);
         }
+    }
+
+    fn treeEql(maybe_tree1: ?*Node, maybe_tree2: ?*Node) bool {
+        if (maybe_tree1) |T1| {
+            if (maybe_tree2) |T2| {
+                if (eql(u8, T1.kind.toTagname(), T2.kind.toTagname())) {
+                    return treeEql(T1.left, T2.left) and treeEql(T1.right, T2.right);
+                } else return false;
+            } else return false;
+        }
+        return true;
     }
 
     pub fn deinit(self: *Self) void {

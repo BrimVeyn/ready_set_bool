@@ -109,78 +109,28 @@ pub fn print_truth_table(allocator: *std.mem.Allocator, formula: []const u8) !vo
     defer allocator.free(ssString);
 }
 
-test "truth_table 1" {
+pub fn computeTT(rpn: []const u8) !void {
     var allocator = std.testing.allocator;
-    const rpn = "AB&C|";
+    std.debug.print("Truth Table for: {s}\n", .{rpn});
     try print_truth_table(&allocator, rpn);
     var ast = try BoolAST.init(&allocator, rpn);
-    try ast.print(&allocator);
+    // try ast.print(&allocator);
     ast.deinit();
     std.debug.print("-----------------------------------------\n", .{});
 }
 
-test "truth_table 3" {
-    var allocator = std.testing.allocator;
-    const rpn = "A!B|";
-    try print_truth_table(&allocator, rpn);
-    var ast = try BoolAST.init(&allocator, rpn);
-    try ast.print(&allocator);
-    ast.deinit();
-    std.debug.print("-----------------------------------------\n", .{});
-}
-
-test "truth_table 2" {
-    var allocator = std.testing.allocator;
-    const rpn = "A!B|ABCD|A&>&BC&!&|1>";
-    try print_truth_table(&allocator, rpn);
-    var ast = try BoolAST.init(&allocator, rpn);
-    try ast.print(&allocator);
-    ast.deinit();
-}
-
-test "truth_table 4" {
-    var allocator = std.testing.allocator;
-    const rpn = "AB!&A!B&|"; //XOR in NNF
-    try print_truth_table(&allocator, rpn);
-    var ast = try BoolAST.init(&allocator, rpn);
-    try ast.print(&allocator);
-    ast.deinit();
-}
-
-test "truth_table 5" {
-    var allocator = std.testing.allocator;
-    const rpn = "AB&A!B!&|"; //XOR in NNF
-    try print_truth_table(&allocator, rpn);
-    var ast = try BoolAST.init(&allocator, rpn);
-    try ast.print(&allocator);
-    ast.deinit();
-}
-
-test "truth_table 6" {
-    var allocator = std.testing.allocator;
-    const rpn = "A!B|AB!|&"; //XOR in NNF
-    try print_truth_table(&allocator, rpn);
-    var ast = try BoolAST.init(&allocator, rpn);
-    try ast.print(&allocator);
-    ast.deinit();
-}
-
-test "truth_table 7" {
-    var allocator = std.testing.allocator;
-    const rpn = "AB&C|"; //XOR in NNF
-    try print_truth_table(&allocator, rpn);
-    var ast = try BoolAST.init(&allocator, rpn);
-    try ast.print(&allocator);
-    ast.deinit();
-}
-
-test "truth_table 8" {
-    var allocator = std.testing.allocator;
-    const rpn = "CA|CB|&"; //XOR in NNF
-    try print_truth_table(&allocator, rpn);
-    var ast = try BoolAST.init(&allocator, rpn);
-    try ast.print(&allocator);
-    ast.deinit();
+test "truth_table 1222" {
+    try computeTT("A!B|ABCD|A&>&BC&!&|D>");
+    try computeTT("AB!&A!BC!D!&A!|&|BC&|&D|");
+    try computeTT("DA|DB!|DBA!B|||DBA!A!C!||||DBA!A!D!||||DCA!B|||DCA!A!C!||||DCA!A!D!||||&&&&&&&");
+    try computeTT("DA|DB!|DBA!B|||DBA!A!C!||||DCA!B|||&&&&");
+    try computeTT("DA|DB|DC|&&");
+    try computeTT("CA|CB!|&");
+    try computeTT("AB&C|");
+    try computeTT("A!B|");
+    try computeTT("A!B|ABCD|A&>&BC&!&|1>");
+    try computeTT("AB!&A!B&|");
+    try computeTT("CA|CB|&");
 }
 
 const ParsingError = @import("eval_formula.zig").ParsingError;

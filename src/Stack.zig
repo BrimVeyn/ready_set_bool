@@ -32,6 +32,11 @@ pub fn Stack(comptime T: type) type {
             return self.data.orderedRemove(0);
         }
 
+        pub fn popIndex(self: *Self, index: usize) T {
+            self.size -= 1;
+            return self.data.orderedRemove(index);
+        }
+
         pub fn deinit(self: *Self) void {
             self.data.deinit();
         }
@@ -39,7 +44,7 @@ pub fn Stack(comptime T: type) type {
         pub fn print(self: *Self) void {
             var len = self.data.items.len;
             while (len > 0) {
-                std.debug.print("{s}stack[{d}] = {}{s}\n", .{ color.magenta, len - 1, self.data.items[len - 1], color.reset });
+                std.debug.print("{s}stack[{d}] = {any}{s}\n", .{ color.magenta, len - 1, self.data.items[len - 1], color.reset });
                 len -%= 1;
             }
         }

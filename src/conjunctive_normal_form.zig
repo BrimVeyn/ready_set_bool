@@ -15,43 +15,12 @@ pub fn conjunctive_normal_form(allocator: *std.mem.Allocator, formula: []const u
     // try ast.print(allocator);
     try ast.toNNF();
     try ast.toCNF();
-    try ast.print(allocator);
+    // try ast.print(allocator);
     return try ast.toRPN();
 }
 
-// test "CNF basic 1" {
-//     var allocator = std.testing.allocator;
-//     const rpn = "AB=";
-//     std.debug.print("RPN Formula: {s}\n", .{rpn});
-//     const new_rpn = try conjunctive_normal_form(&allocator, rpn);
-//     defer allocator.free(new_rpn);
-//     std.debug.print("CNF RPN Formula: {s}\n", .{new_rpn});
-//     std.debug.print("-----------------------------\n", .{});
-// }
-//
-// test "CNF basic 3" {
-//     var allocator = std.testing.allocator;
-//     const rpn = "AB0||";
-//     std.debug.print("RPN Formula: {s}\n", .{rpn});
-//     const new_rpn = try conjunctive_normal_form(&allocator, rpn);
-//     defer allocator.free(new_rpn);
-//     std.debug.print("CNF RPN Formula: {s}\n", .{new_rpn});
-//     std.debug.print("-----------------------------\n", .{});
-// }
-//
-// test "CNF basic 4" {
-//     var allocator = std.testing.allocator;
-//     const rpn = "AB&C&D&";
-//     std.debug.print("RPN Formula: {s}\n", .{rpn});
-//     const new_rpn = try conjunctive_normal_form(&allocator, rpn);
-//     defer allocator.free(new_rpn);
-//     std.debug.print("CNF RPN Formula: {s}\n", .{new_rpn});
-//     std.debug.print("-----------------------------\n", .{});
-// }
-
-test "CNF basic 5" {
+pub fn CNFTest(rpn: []const u8) !void {
     var allocator = std.testing.allocator;
-    const rpn = "AB|!C!&";
     std.debug.print("RPN Formula: {s}\n", .{rpn});
     const new_rpn = try conjunctive_normal_form(&allocator, rpn);
     defer allocator.free(new_rpn);
@@ -59,36 +28,24 @@ test "CNF basic 5" {
     std.debug.print("-----------------------------\n", .{});
 }
 
-// test "CNF basic 2" {
-//     var allocator = std.testing.allocator;
-//     const rpn = "AB&A!B!&|";
-//     std.debug.print("RPN Formula: {s}\n", .{rpn});
-//     const new_rpn = try conjunctive_normal_form(&allocator, rpn);
-//     defer allocator.free(new_rpn);
-//     std.debug.print("CNF RPN Formula: {s}\n", .{new_rpn});
-//     std.debug.print("-----------------------------\n", .{});
-// }
+test "CNF basic 1" {
+    //From subject tests
+    // try CNFTest("AB&!");
+    // try CNFTest("AB|!");
+    // try CNFTest("AB|C&");
+    // try CNFTest("AB|C|D|");
+    // try CNFTest("AB&C&D&");
+    // try CNFTest("AB&!C!|");
+    // try CNFTest("AB|!C!&");
 
-test "CNF Error 1" {
-    var allocator = std.testing.allocator;
-    const rpn = "ABC!!";
-    const Err = conjunctive_normal_form(&allocator, rpn);
-    _ = try std.testing.expectError(error.wrongFormat, Err);
-    std.debug.print("-----------------------------\n", .{});
-}
+    //Advanced tests
+    // try CNFTest("AA!|");
+    // try CNFTest("A!B|ABCD|A&>&BC&!&|1>");
+    try CNFTest("A!B|ABCD|A&>&BC&!&|D>");
+    // try CNFTest("DD&");
 
-test "CNF Error 2" {
-    var allocator = std.testing.allocator;
-    const rpn = "A !";
-    const Err = conjunctive_normal_form(&allocator, rpn);
-    _ = try std.testing.expectError(error.invalidCharacter, Err);
-    std.debug.print("-----------------------------\n", .{});
-}
-
-test "CNF Error 3" {
-    var allocator = std.testing.allocator;
-    const rpn = "&A !";
-    const Err = conjunctive_normal_form(&allocator, rpn);
-    _ = try std.testing.expectError(error.wrongFormat, Err);
-    std.debug.print("-----------------------------\n", .{});
+    //Errors
+    _ = try std.testing.expectError(error.wrongFormat, CNFTest("ABC!!"));
+    _ = try std.testing.expectError(error.invalidCharacter, CNFTest("A !"));
+    _ = try std.testing.expectError(error.wrongFormat, CNFTest("&A !"));
 }

@@ -18,126 +18,28 @@ pub fn negation_normal_form(allocator: *std.mem.Allocator, formula: []const u8) 
     return try ast.toRPN();
 }
 
+pub fn computeCNF(rpn: []const u8) !void {
+    var allocator = std.testing.allocator;
+    std.debug.print("RPN Formula: {s}\n", .{rpn});
+    const new_rpn = try negation_normal_form(&allocator, rpn);
+    defer allocator.free(new_rpn);
+    std.debug.print("NNF RPN Formula: {s}\n", .{new_rpn});
+    std.debug.print("-----------------------------\n", .{});
+}
+
 test "NNF basic 1" {
-    var allocator = std.testing.allocator;
-    const rpn = "01>";
-    std.debug.print("RPN Formula: {s}\n", .{rpn});
-    const new_rpn = try negation_normal_form(&allocator, rpn);
-    defer allocator.free(new_rpn);
-    std.debug.print("NNF RPN Formula: {s}\n", .{new_rpn});
-    std.debug.print("-----------------------------\n", .{});
-}
+    try computeCNF("01>");
+    try computeCNF("AB=");
+    try computeCNF("AB&CD&=");
+    try computeCNF("01&1!0||10!|0110&=|&>");
+    try computeCNF("AB^");
+    try computeCNF("AB&!");
+    try computeCNF("AB|!");
+    try computeCNF("AB&!!!");
+    try computeCNF("AB|C&!");
 
-test "NNF basic 2" {
-    var allocator = std.testing.allocator;
-    const rpn = "AB=";
-    std.debug.print("RPN Formula: {s}\n", .{rpn});
-    const new_rpn = try negation_normal_form(&allocator, rpn);
-    defer allocator.free(new_rpn);
-    std.debug.print("NNF RPN Formula: {s}\n", .{new_rpn});
-    std.debug.print("-----------------------------\n", .{});
-}
-
-test "NNF basic 3" {
-    var allocator = std.testing.allocator;
-    const rpn = "AB&CD&=";
-    std.debug.print("RPN Formula: {s}\n", .{rpn});
-    const new_rpn = try negation_normal_form(&allocator, rpn);
-    defer allocator.free(new_rpn);
-    std.debug.print("NNF RPN Formula: {s}\n", .{new_rpn});
-    std.debug.print("-----------------------------\n", .{});
-}
-
-test "NNF basic 4" {
-    var allocator = std.testing.allocator;
-    const rpn = "01&1!0||10!|0110&=|&>";
-    std.debug.print("RPN Formula: {s}\n", .{rpn});
-    const new_rpn = try negation_normal_form(&allocator, rpn);
-    defer allocator.free(new_rpn);
-    std.debug.print("NNF RPN Formula: {s}\n", .{new_rpn});
-    std.debug.print("-----------------------------\n", .{});
-}
-
-test "NNF basic 5" {
-    var allocator = std.testing.allocator;
-    const rpn = "AB^";
-    std.debug.print("RPN Formula: {s}\n", .{rpn});
-    const new_rpn = try negation_normal_form(&allocator, rpn);
-    defer allocator.free(new_rpn);
-    std.debug.print("NNF RPN Formula: {s}\n", .{new_rpn});
-    std.debug.print("-----------------------------\n", .{});
-}
-
-test "NNF basic 6" {
-    var allocator = std.testing.allocator;
-    const rpn = "AB=";
-    std.debug.print("RPN Formula: {s}\n", .{rpn});
-    const new_rpn = try negation_normal_form(&allocator, rpn);
-    defer allocator.free(new_rpn);
-    std.debug.print("NNF RPN Formula: {s}\n", .{new_rpn});
-    std.debug.print("-----------------------------\n", .{});
-}
-
-test "NNF basic 7" {
-    var allocator = std.testing.allocator;
-    const rpn = "AB&!";
-    std.debug.print("RPN Formula: {s}\n", .{rpn});
-    const new_rpn = try negation_normal_form(&allocator, rpn);
-    defer allocator.free(new_rpn);
-    std.debug.print("NNF RPN Formula: {s}\n", .{new_rpn});
-    std.debug.print("-----------------------------\n", .{});
-}
-
-test "NNF basic 8" {
-    var allocator = std.testing.allocator;
-    const rpn = "AB|!";
-    std.debug.print("RPN Formula: {s}\n", .{rpn});
-    const new_rpn = try negation_normal_form(&allocator, rpn);
-    defer allocator.free(new_rpn);
-    std.debug.print("NNF RPN Formula: {s}\n", .{new_rpn});
-    std.debug.print("-----------------------------\n", .{});
-}
-
-test "NNF basic 9" {
-    var allocator = std.testing.allocator;
-    const rpn = "AB&!!!";
-    std.debug.print("RPN Formula: {s}\n", .{rpn});
-    const new_rpn = try negation_normal_form(&allocator, rpn);
-    defer allocator.free(new_rpn);
-    std.debug.print("NNF RPN Formula: {s}\n", .{new_rpn});
-    std.debug.print("-----------------------------\n", .{});
-}
-
-test "NNF basic 10" {
-    var allocator = std.testing.allocator;
-    const rpn = "AB|C&!";
-    std.debug.print("RPN Formula: {s}\n", .{rpn});
-    const new_rpn = try negation_normal_form(&allocator, rpn);
-    defer allocator.free(new_rpn);
-    std.debug.print("NNF RPN Formula: {s}\n", .{new_rpn});
-    std.debug.print("-----------------------------\n", .{});
-}
-
-test "NNF Error 1" {
-    var allocator = std.testing.allocator;
-    const rpn = "ABC!!";
-    const Err = negation_normal_form(&allocator, rpn);
-    _ = try std.testing.expectError(error.wrongFormat, Err);
-    std.debug.print("-----------------------------\n", .{});
-}
-
-test "NNF Error 2" {
-    var allocator = std.testing.allocator;
-    const rpn = "A !";
-    const Err = negation_normal_form(&allocator, rpn);
-    _ = try std.testing.expectError(error.invalidCharacter, Err);
-    std.debug.print("-----------------------------\n", .{});
-}
-
-test "NNF Error 3" {
-    var allocator = std.testing.allocator;
-    const rpn = "&A !";
-    const Err = negation_normal_form(&allocator, rpn);
-    _ = try std.testing.expectError(error.wrongFormat, Err);
-    std.debug.print("-----------------------------\n", .{});
+    //Errors
+    _ = try std.testing.expectError(error.wrongFormat, computeCNF("ABC!!"));
+    _ = try std.testing.expectError(error.invalidCharacter, computeCNF("A !"));
+    _ = try std.testing.expectError(error.wrongFormat, computeCNF("&A !"));
 }
