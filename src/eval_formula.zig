@@ -65,16 +65,16 @@ pub const ParsingError = error{
     invalidCharacter,
 };
 
-pub fn evalFormula(allocator: *std.mem.Allocator, str: []const u8) !bool {
+pub fn evalFormula(allocator: *std.mem.Allocator, formula: []const u8) !bool {
     var stack = try Stack(u1).init(allocator);
     defer stack.deinit();
 
     var i: usize = 0;
 
-    while (i < str.len) : (i += 1) {
-        if (Value.getValue(str[i])) |value| {
+    while (i < formula.len) : (i += 1) {
+        if (Value.getValue(formula[i])) |value| {
             try stack.push(value.getBool());
-        } else if (Operator.getOp(str[i])) |operator| {
+        } else if (Operator.getOp(formula[i])) |operator| {
             if (operator == Operator.@"!") {
                 // std.debug.print("~{d}\n", .{stack.data.items[stack.data.items.len - 1]});
                 try stack.push(~stack.pop());

@@ -1,18 +1,6 @@
 const std = @import("std");
 const math = std.math;
-const AST = @import("AST.zig");
-const BoolAST = AST.BoolAST;
-const Variable = AST.Variable;
 const ArrayList = std.ArrayList;
-const bit_set = std.bit_set;
-const evalFormula = @import("eval_formula.zig").evalFormula;
-const StringStream = @import("StringStream.zig").StringStream;
-const truth_table = @import("print_truth_table.zig");
-const countVar = truth_table.countVar;
-const checkSetIntegrity = truth_table.checkSetIntegrity;
-const usizeToBitSet = truth_table.usizeToBitSet;
-const replaceVariable = truth_table.replaceVariable;
-const getValueBitSet = truth_table.getValueBitSet;
 
 fn setCmp(setA: ArrayList(i32), setB: ArrayList(i32)) i32 {
     if (setA.items.len > setB.items.len) {
@@ -99,9 +87,4 @@ test "Powerset tests" {
 
     try vect3.appendSlice(&slice3);
     try PSTest(&allocator, vect3);
-
-    //Errors
-    // _ = try std.testing.expectError(error.wrongFormat, SATTest("ABC!!"));
-    // _ = try std.testing.expectError(error.invalidCharacter, SATTest("A !"));
-    // _ = try std.testing.expectError(error.wrongFormat, SATTest("&A !"));
 }
