@@ -10,9 +10,9 @@ const Value = eval_formula.Value;
 const Variable = AST.Variable;
 const ParsingError = eval_formula.ParsingError;
 
-pub const evalSetErrors = error {
+pub const evalSetErrors = error{
     wrongNumberOfSets,
-    valueNotAccepted,
+    valuesNotAccepted,
 };
 
 fn formulaIsWrong(formula: []const u8, setLen: usize) !void {
@@ -20,54 +20,54 @@ fn formulaIsWrong(formula: []const u8, setLen: usize) !void {
         if (Variable.getVariable(token)) |_| {
             if (token - 'A' + 1 > setLen) return evalSetErrors.wrongNumberOfSets;
         }
-        if (Value.getValue(token)) |_| return evalSetErrors.valueNotAccepted;
+        if (Value.getValue(token)) |_| return evalSetErrors.valuesNotAccepted;
     }
 }
 
 pub fn eval_set(allocator: *std.mem.Allocator, formula: []const u8, sets: ArrayList(ArrayList(i32))) !ArrayList(i32) {
-    _ = formula; // autofix
-    _ = sets; // autofix
     var stack = try Stack(ArrayList(i32)).init(allocator);
-    var resultSet = ArrayList(i32).init(allocator.*);
-    try resultSet.append(32);
+
     defer stack.deinit();
 
-    formulaIsWrong() catch |e| return e;
-    return resultSet;
+    formulaIsWrong(formula, sets.items.len) catch |e| {
+        return e;
+    };
 
-    // var i: usize = 0;
-    //
-    // while (i < formula.len) : (i += 1) {
-    //     if (Value.getValue(formula[i])) |value| {
-    //         try stack.push(value.getBool());
-    //     } else if (Operator.getOp(formula[i])) |operator| {
-    //         if (operator == Operator.@"!") {
-    //             // std.debug.print("~{d}\n", .{stack.data.items[stack.data.items.len - 1]});
-    //             try stack.push(~stack.pop());
-    //             continue;
-    //         }
-    //
-    //         if (stack.size < 2) return ParsingError.wrongFormat;
-    //
-    //         const a = stack.pop();
-    //         const b = stack.pop();
-    //
-    //         try stack.push(operator.doOp(a, b));
-    //     } else return ParsingError.invalidCharacter;
-    // }
-    // stack.print();
-    // return if (stack.pop() == 0) false else true;
+    for (formula) |token| {
+        if (Operator.getOp(token)) |operator| {
+            if (stack.size < 2) return error.wrongFormat;
+
+            const b = stack.pop();
+            const a = stack.pop();
+            const new_set = try operator.doSetOp(allocator, a, b);
+            a.deinit();
+            b.deinit();
+
+            try stack.push(new_set);
+        } else try stack.push(try sets.items.ptr[token - 'A'].clone());
+    }
+
+    return stack.pop();
 }
 
 pub fn ESTest(allocator: *std.mem.Allocator, formula: []const u8, sets: ArrayList(ArrayList(i32))) !void {
-    defer for (sets.items) |item| item.deinit();
     std.debug.print("Input Sets :\n", .{});
     for (sets.items) |Set| {
-        defer Set.deinit();
         std.debug.print("{any}\n", .{Set.items});
     }
-    const result = try eval_set(allocator, formula, sets);
+
+    const result = eval_set(allocator, formula, sets) catch |e| {
+        for (sets.items) |item| item.deinit();
+        sets.deinit();
+        return e;
+    };
+
+    std.debug.print("Result set = {any}\n", .{result.items});
     defer result.deinit();
+
+    for (sets.items) |item| item.deinit();
+    sets.deinit();
+
     std.debug.print("-----------------------------\n", .{});
 }
 
@@ -75,11 +75,17 @@ test "Evalset tests" {
     //From subject tests
     var allocator = std.testing.allocator;
 
-    var vect = ArrayList(i32).init(allocator);
-    var setA = [5]i32{ 1, 2, 3 };
-    var setB = [3]i32{ 1, 2, 3 };
+    var sets = ArrayList(ArrayList(i32)).init(allocator);
+    var setA = ArrayList(i32).init(allocator);
+    var setB = ArrayList(i32).init(allocator);
+    var sliceA = [5]i32{ 1, 2, 3, 4, 5 };
+    var sliceB = [3]i32{ 1, 2, 3 };
+    try setA.appendSlice(&sliceA);
+    try setB.appendSlice(&sliceB);
 
-    try vect.appendSlice(&slice);
-    try PSTest(&allocator, vect);
+    try sets.append(setA);
+    try sets.append(setB);
 
+    try ESTest(&allocator, "AB^", sets);
+    // _ = try std.testing.expectError(evalSetErrors.wrongNumberOfSets, ESTest(&allocator, "ABC|", setsClone));
 }

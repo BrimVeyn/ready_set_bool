@@ -2,6 +2,7 @@ const std = @import("std");
 const AST = @import("AST.zig");
 const Stack = @import("Stack.zig").Stack;
 const color = @import("Colors.zig").ansi;
+const ArrayList = std.ArrayList;
 
 pub const Operator = enum(u8) {
     const Self = @This();
@@ -35,6 +36,60 @@ pub const Operator = enum(u8) {
             .@"=" => if (b == a) 1 else 0,
             else => 0,
         };
+    }
+
+    pub fn doSetOp(self: Self, allocator: *std.mem.Allocator, a: ArrayList(i32), b: ArrayList(i32)) !ArrayList(i32) {
+        return switch (self) {
+            .@"&" => try doIntersection(allocator, a, b),
+            .@"|" => try doUnion(allocator, a, b),
+            .@"^" => try doDifference(allocator, a, b),
+            .@">" => try doMaterialImplication(allocator, a, b),
+            else => return ArrayList(i32).init(std.testing.allocator),
+            // .@"=" => doLogicalEquivalence(a, b),
+            // .@"!" => doNegate(a, b),
+        };
+    }
+
+    fn doIntersection(allocator: *std.mem.Allocator, a: ArrayList(i32), b: ArrayList(i32)) !ArrayList(i32) {
+        var result = ArrayList(i32).init(allocator.*);
+        for (a.items) |itemA| {
+            for (b.items) |itemB| {
+                if (itemB == itemA) try result.append(itemA);
+            }
+        }
+        return result;
+    }
+
+    fn doMaterialImplication(allocator: *std.mem.Allocator, a: ArrayList(i32), b: ArrayList(i32)) !ArrayList(i32) {
+        _ = a; // autofix
+        _ = b; // autofix
+        const result = ArrayList(i32).init(allocator.*);
+        return result;
+    }
+
+    fn doDifference(allocator: *std.mem.Allocator, a: ArrayList(i32), b: ArrayList(i32)) !ArrayList(i32) {
+        var result = ArrayList(i32).init(allocator.*);
+        for (a.items) |itemA| {
+            var found: bool = false;
+            for (b.items) |itemB| {
+                if (itemB == itemA) found = true;
+            }
+            if (!found) try result.append(itemA);
+        }
+        return result;
+    }
+
+    fn doUnion(allocator: *std.mem.Allocator, a: ArrayList(i32), b: ArrayList(i32)) !ArrayList(i32) {
+        var result = ArrayList(i32).init(allocator.*);
+        for (a.items) |item| try result.append(item);
+        for (b.items) |item| {
+            var found: bool = false;
+            for (result.items) |ritem| {
+                if (ritem == item) found = true;
+            }
+            if (!found) try result.append(item);
+        }
+        return result;
     }
 };
 
