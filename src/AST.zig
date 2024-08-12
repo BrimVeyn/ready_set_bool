@@ -212,7 +212,7 @@ pub const BoolAST = struct {
     }
 
     pub fn toNNF(self: *Self) !void {
-        try self.print(self.allocator);
+        // try self.print(self.allocator);
         for (0..100) |_| {
             const oldTree = try dup(self.root);
             defer freeTree(self.allocator, oldTree);
@@ -223,7 +223,7 @@ pub const BoolAST = struct {
             try applyDeMorgan(self.root);
             try removeMultipleNot(self.root);
             if (treeEql(oldTree, self.root)) break;
-            try self.print(self.allocator);
+            // try self.print(self.allocator);
         }
     }
 
@@ -235,11 +235,11 @@ pub const BoolAST = struct {
             defer freeTree(self.allocator, oldTree);
             try applyIdentity(self.allocator, self.root);
             try applyAnnulment(self.allocator, self.root);
-            try flattenAndReorder(self.allocator, self.root, Operator.@"&", treeIsCNF);
             try flattenAndReorder(self.allocator, self.root, Operator.@"|", treeIsCNF);
+            try flattenAndReorder(self.allocator, self.root, Operator.@"&", treeIsCNF);
+            // try self.print(self.allocator);
             if (treeEql(oldTree, self.root)) break;
             // std.debug.print("IS CNF ? {}\n", .{treeIsCNF});
-            try self.print(self.allocator);
         }
     }
 
@@ -313,17 +313,37 @@ pub const BoolAST = struct {
             if (switch (maybe_not.kind) {
                 .value => true,
                 .variable => true,
-                .operator => false,
+                .operator => switch (maybe_not.kind.operator) {
+                    .@"!" => true,
+                    else => false,
+                },
             }) {
                 for (stack.data.items) |maybe_self| {
                     if (switch (maybe_self.kind) {
                         .value => true,
                         .variable => true,
-                        .operator => false,
-                    } and (eql(u8, maybe_not.kind.toTagname(), maybe_self.kind.toTagname())) and (it != inner_it)) {
-                        freeTree(allocator, stack.popIndex(inner_it));
-                        try applyComplementLaw(allocator, stack, operator);
-                        return;
+                        .operator => switch (maybe_self.kind.operator) {
+                            .@"!" => true,
+                            else => false,
+                        },
+                    }) {
+                        if (eql(u8, maybe_not.kind.toTagname(), maybe_self.kind.toTagname()) and (it != inner_it)) {
+                            if (eql(u8, maybe_not.kind.toTagname(), "!")) {
+                                const value1 = maybe_not.left.?;
+                                const value2 = maybe_self.left.?;
+
+                                if (eql(u8, value1.kind.toTagname(), value2.kind.toTagname())) {
+                                    // std.debug.print("found {} {}\n", .{ value1, value2 });
+                                    freeTree(allocator, stack.popIndex(inner_it));
+                                    try applyComplementLaw(allocator, stack, operator);
+                                    return;
+                                }
+                            } else {
+                                freeTree(allocator, stack.popIndex(inner_it));
+                                try applyComplementLaw(allocator, stack, operator);
+                                return;
+                            }
+                        }
                     }
                     inner_it += 1;
                 }
@@ -332,6 +352,7 @@ pub const BoolAST = struct {
                 const nottedValue = maybe_not.left.?;
                 for (stack.data.items) |item| {
                     if (eql(u8, nottedValue.kind.toTagname(), item.kind.toTagname())) {
+                        // std.debug.print("replacing {}\nand {}\nby {}\n", .{ nottedValue, item, value });
                         item.kind = Kind{ .value = value };
                         freeTree(allocator, stack.popIndex(it));
                         try applyComplementLaw(allocator, stack, operator);
@@ -351,6 +372,7 @@ pub const BoolAST = struct {
                     .@"!" => {
                         const mn_lhs = maybenotted.left.?;
                         if (eql(u8, item.kind.toTagname(), mn_lhs.kind.toTagname())) {
+                            // std.debug.print("replacing {}\nand {}\nby {}\n", .{ item, maybenotted, 0 });
                             freeTree(allocator, maybenotted.left);
                             maybenotted.left = null;
                             maybenotted.right = null;
@@ -424,9 +446,15 @@ pub const BoolAST = struct {
 
             var current = maybe_node;
             if (stack.size >= 2) {
-                //Complement law ---> (A + !A) = 0 || (A & !A) = 1
+                //Complement law ---> (A & !A) = 0 || (A + !A) = 1
                 //Idempotent law ---> (A + A) = A || (A & A) = A
+                //Idemportent law ---> (!A + !A) = !A || (!A & !A) = !A
+                // std.debug.print("before----------------\n", .{});
+                // stack.print();
+                // std.debug.print("after----------------\n", .{});
                 try applyComplementLaw(allocator, &stack, operator);
+                // stack.print();
+                // std.debug.print("---------------------\n", .{});
                 //Inclusion theorem ---> (A + B) & (A + !B) & (A + B)... (+)&(+)&... = A
                 if (CNF and operator == Operator.@"&") {
                     var variableStack = try Stack(*Node).init(allocator);
@@ -450,11 +478,12 @@ pub const BoolAST = struct {
                     current.?.right = stack.popFront();
                 } else if (stack.size == 1) {
                     const toFree = stack.popFront();
-                    current.?.kind = toFree.kind;
-                    current.?.left = null;
-                    current.?.right = null;
+                    current.?.* = toFree.*;
+                    // current.?.kind = toFree.kind;
+                    // current.?.left = toFree.left;
+                    // current.?.right = toFree.right;
 
-                    freeTree(allocator, toFree);
+                    allocator.destroy(toFree);
                 }
             } else for (0..stack.size) |i| freeTree(allocator, stack.data.items.ptr[i]);
 

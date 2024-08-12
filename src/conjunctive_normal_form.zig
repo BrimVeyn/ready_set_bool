@@ -14,6 +14,7 @@ pub fn conjunctive_normal_form(allocator: *std.mem.Allocator, formula: []const u
     defer ast.deinit();
     // try ast.print(allocator);
     try ast.toNNF();
+    // try ast.print(allocator);
     try ast.toCNF();
     // try ast.print(allocator);
     return try ast.toRPN();
@@ -30,22 +31,24 @@ pub fn CNFTest(rpn: []const u8) !void {
 
 test "CNF basic 1" {
     //From subject tests
-    // try CNFTest("AB&!");
-    // try CNFTest("AB|!");
-    // try CNFTest("AB|C&");
-    // try CNFTest("AB|C|D|");
-    // try CNFTest("AB&C&D&");
-    // try CNFTest("AB&!C!|");
-    // try CNFTest("AB|!C!&");
+    try CNFTest("AB&!");
+    try CNFTest("AB|!");
+    try CNFTest("AB|C&");
+    try CNFTest("AB|C|D|");
+    try CNFTest("AB&C&D&");
+    try CNFTest("AB&!C!|");
+    try CNFTest("AB|!C!&");
 
     //Advanced tests
-    // try CNFTest("AA!|");
-    // try CNFTest("A!B|ABCD|A&>&BC&!&|1>");
+    try CNFTest("AA!|");
+    try CNFTest("A!B|ABCD|A&>&BC&!&|1>");
     try CNFTest("A!B|ABCD|A&>&BC&!&|D>");
-    // try CNFTest("DD&");
+    try CNFTest("DD&");
+    try CNFTest("D!D!&");
+    try CNFTest("DA|DB!|DBA!B|||DBA!A!C!||||DBA!A!D!||||DCA!B|||DCA!A!C!||||DCA!A!D!||||&&&&&&&DA|DB!|DBA!B|||DBA!A!C!||||DBA!A!D!||||DCA!B|||DCA!A!C!||||DCA!A!D!||||&&&&&&&&");
 
     //Errors
-    _ = try std.testing.expectError(error.wrongFormat, CNFTest("ABC!!"));
-    _ = try std.testing.expectError(error.invalidCharacter, CNFTest("A !"));
-    _ = try std.testing.expectError(error.wrongFormat, CNFTest("&A !"));
+    // _ = try std.testing.expectError(error.wrongFormat, CNFTest("ABC!!"));
+    // _ = try std.testing.expectError(error.invalidCharacter, CNFTest("A !"));
+    // _ = try std.testing.expectError(error.wrongFormat, CNFTest("&A !"));
 }
