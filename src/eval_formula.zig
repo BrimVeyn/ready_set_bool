@@ -38,16 +38,42 @@ pub const Operator = enum(u8) {
         };
     }
 
-    pub fn doSetOp(self: Self, allocator: *std.mem.Allocator, a: ArrayList(i32), b: ArrayList(i32)) !ArrayList(i32) {
+    pub fn doSetOp(self: Self, allocator: *std.mem.Allocator, a: ArrayList(i32), b: ArrayList(i32), U: ArrayList(i32)) !ArrayList(i32) {
         return switch (self) {
             .@"&" => try doIntersection(allocator, a, b),
             .@"|" => try doUnion(allocator, a, b),
             .@"^" => try doDifference(allocator, a, b),
-            .@">" => try doMaterialImplication(allocator, a, b),
-            else => return ArrayList(i32).init(std.testing.allocator),
-            // .@"=" => doLogicalEquivalence(a, b),
-            // .@"!" => doNegate(a, b),
+            .@">" => try doMaterialImplication(allocator, a, b, U),
+            .@"=" => try doLogicalEquivalence(allocator, a, b, U),
+            .@"!" => try doComplement(allocator, a, U),
         };
+    }
+
+    fn doLogicalEquivalence(allocator: *std.mem.Allocator, a: ArrayList(i32), b: ArrayList(i32), U: ArrayList(i32)) !ArrayList(i32) {
+        //(A ∩ B) ∪ (A∁ ∩ B∁)
+        var complementOfA = try doComplement(allocator, a, U);
+        defer complementOfA.deinit();
+        var complementOfB = try doComplement(allocator, b, U);
+        defer complementOfB.deinit();
+        var intersectionofAB = try doIntersection(allocator, a, b);
+        defer intersectionofAB.deinit();
+        var intersectionOfAcBc = try doIntersection(allocator, complementOfA, complementOfB);
+        defer intersectionOfAcBc.deinit();
+        const result = try doUnion(allocator, intersectionofAB, intersectionOfAcBc);
+        return result;
+    }
+
+    fn doComplement(allocator: *std.mem.Allocator, a: ArrayList(i32), U: ArrayList(i32)) !ArrayList(i32) {
+        //A∁ = U \ A = {x ∈ U : x ∉ A}
+        var result = ArrayList(i32).init(allocator.*);
+        for (U.items) |Uitem| {
+            var found: bool = false;
+            for (a.items) |Aitem| {
+                if (Aitem == Uitem) found = true;
+            }
+            if (!found) try result.append(Uitem);
+        }
+        return result;
     }
 
     fn doIntersection(allocator: *std.mem.Allocator, a: ArrayList(i32), b: ArrayList(i32)) !ArrayList(i32) {
@@ -60,10 +86,12 @@ pub const Operator = enum(u8) {
         return result;
     }
 
-    fn doMaterialImplication(allocator: *std.mem.Allocator, a: ArrayList(i32), b: ArrayList(i32)) !ArrayList(i32) {
-        _ = a; // autofix
-        _ = b; // autofix
-        const result = ArrayList(i32).init(allocator.*);
+    fn doMaterialImplication(allocator: *std.mem.Allocator, a: ArrayList(i32), b: ArrayList(i32), U: ArrayList(i32)) !ArrayList(i32) {
+        // A => B <=> (!A | B) <=> (A∁ ∪ B)
+        var complementOfA = try doComplement(allocator, a, U);
+        defer complementOfA.deinit();
+        const result = doUnion(allocator, complementOfA, b);
+
         return result;
     }
 
@@ -72,14 +100,21 @@ pub const Operator = enum(u8) {
         for (a.items) |itemA| {
             var found: bool = false;
             for (b.items) |itemB| {
-                if (itemB == itemA) found = true;
+                if (itemA == itemB) found = true;
             }
             if (!found) try result.append(itemA);
+        }
+        for (b.items) |itemB| {
+            var found: bool = false;
+            for (a.items) |itemA| {
+                if (itemB == itemA) found = true;
+            }
+            if (!found) try result.append(itemB);
         }
         return result;
     }
 
-    fn doUnion(allocator: *std.mem.Allocator, a: ArrayList(i32), b: ArrayList(i32)) !ArrayList(i32) {
+    pub fn doUnion(allocator: *std.mem.Allocator, a: ArrayList(i32), b: ArrayList(i32)) !ArrayList(i32) {
         var result = ArrayList(i32).init(allocator.*);
         for (a.items) |item| try result.append(item);
         for (b.items) |item| {
